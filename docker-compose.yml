@@ -47,11 +47,25 @@ services:
     ports:
       - "8083:8083"
     environment:
-      - GATEWAY_PORT=8083
-      - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://localhost:8084}
-    restart: unless-stopped
+      - ORDER_SERVICE_URL=http://order-service:8084
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - order-service
+
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      - ORDER_SERVICE_PORT=8084
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 3
