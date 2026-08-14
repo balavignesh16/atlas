@@ -1,0 +1,19 @@
+server:
+  port: ${GATEWAY_PORT:8083}
+  shutdown: graceful
+
+order:
+  service:
+    url: ${ORDER_SERVICE_URL:http://localhost:8084}
+    timeout-ms: ${ORDER_SERVICE_TIMEOUT_MS:2000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true

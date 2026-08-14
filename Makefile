@@ -7,6 +7,8 @@ build:
 	cd services/intelligence-engine && go build -o atlas-intelligence-engine .
 	@echo "Building ATLAS Agent..."
 	cd agents/atlas-agent && go build -o atlas-agent .
+	@echo "Building Gateway..."
+	cd services/gateway && mvn clean package -DskipTests
 
 test:
 	@echo "Testing Control Plane..."
@@ -15,6 +17,8 @@ test:
 	cd services/intelligence-engine && go test -v ./...
 	@echo "Testing ATLAS Agent..."
 	cd agents/atlas-agent && go test -v ./...
+	@echo "Testing Gateway..."
+	cd services/gateway && mvn test
 
 lint:
 	@echo "Formatting Go code..."
@@ -32,6 +36,7 @@ docker-build:
 	cd services/intelligence-engine && $env:GOOS="linux"; $env:CGO_ENABLED="0"; go build -o atlas-intelligence-engine .
 	cd agents/atlas-agent && $env:GOOS="linux"; $env:CGO_ENABLED="0"; go build -o atlas-agent .
 	cd services/control-plane && mvn clean package -DskipTests
+	cd services/gateway && mvn clean package -DskipTests
 	docker-compose build
 
 docker-up:

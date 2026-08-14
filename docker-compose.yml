@@ -34,14 +34,24 @@ services:
   atlas-agent:
     build:
       context: ./agents/atlas-agent
+      dockerfile: Dockerfile
     ports:
-      - "${ATLAS_AGENT_PORT:-8082}:8082"
+      - "8082:8082"
     environment:
-      - APP_ENV=${APP_ENV:-development}
       - ATLAS_AGENT_PORT=8082
+
+  atlas-gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    environment:
+      - GATEWAY_PORT=8083
+      - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://localhost:8084}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 3
