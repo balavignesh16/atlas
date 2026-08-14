@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  control-plane:
+    build:
+      context: ./services/control-plane
+    ports:
+      - "${SPRING_PORT:-8080}:8080"
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - SPRING_PORT=8080
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  intelligence-engine:
+    build:
+      context: ./services/intelligence-engine
+    ports:
+      - "${ATLAS_ENGINE_PORT:-8081}:8081"
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - ATLAS_ENGINE_PORT=8081
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  atlas-agent:
+    build:
+      context: ./agents/atlas-agent
+    ports:
+      - "${ATLAS_AGENT_PORT:-8082}:8082"
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - ATLAS_AGENT_PORT=8082
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

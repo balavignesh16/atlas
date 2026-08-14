@@ -1,0 +1,32 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+atlas-intelligence-engine
+atlas-agent
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Java
+target/
+*.jar
+*.war
+*.ear
+*.class
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Env
+.env
