@@ -11,6 +11,8 @@ build:
 	cd services/gateway && mvn clean package -DskipTests
 	@echo "Building Order Service..."
 	cd services/order-service && mvn clean package -DskipTests
+	@echo "Building Inventory Service..."
+	cd services/inventory-service && mvn clean package -DskipTests
 
 test:
 	@echo "Testing Control Plane..."
@@ -23,6 +25,8 @@ test:
 	cd services/gateway && mvn test
 	@echo "Testing Order Service..."
 	cd services/order-service && mvn test
+	@echo "Testing Inventory Service..."
+	cd services/inventory-service && mvn test
 
 lint:
 	@echo "Formatting Go code..."
@@ -37,11 +41,12 @@ run:
 
 docker-build:
 	@echo "Building Linux binaries for Docker..."
-	cd services/intelligence-engine && $env:GOOS="linux"; $env:CGO_ENABLED="0"; go build -o atlas-intelligence-engine .
-	cd agents/atlas-agent && $env:GOOS="linux"; $env:CGO_ENABLED="0"; go build -o atlas-agent .
+	cd services/intelligence-engine && set GOOS=linux&& set CGO_ENABLED=0&& go build -o atlas-intelligence-engine .
+	cd agents/atlas-agent && set GOOS=linux&& set CGO_ENABLED=0&& go build -o atlas-agent .
 	cd services/control-plane && mvn clean package -DskipTests
 	cd services/gateway && mvn clean package -DskipTests
 	cd services/order-service && mvn clean package -DskipTests
+	cd services/inventory-service && mvn clean package -DskipTests
 	docker-compose build
 
 docker-up:

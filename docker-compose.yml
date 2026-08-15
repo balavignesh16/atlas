@@ -64,8 +64,25 @@ services:
       - "8084:8084"
     environment:
       - ORDER_SERVICE_PORT=8084
+      - INVENTORY_SERVICE_URL=http://inventory-service:8085
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - inventory-service
+
+  inventory-service:
+    build:
+      context: ./services/inventory-service
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+    environment:
+      - INVENTORY_SERVICE_PORT=8085
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 3

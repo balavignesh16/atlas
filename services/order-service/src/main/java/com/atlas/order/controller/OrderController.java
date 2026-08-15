@@ -20,27 +20,45 @@ public class OrderController {
 
     private static final Logger logger = LoggerFactory.getLogger(OrderController.class);
     private final OrderRepository orderRepository;
+    private final com.atlas.order.client.InventoryClient inventoryClient;
 
-    public OrderController(OrderRepository orderRepository) {
+    public OrderController(OrderRepository orderRepository, com.atlas.order.client.InventoryClient inventoryClient) {
         this.orderRepository = orderRepository;
+        this.inventoryClient = inventoryClient;
     }
 
     @PostMapping
     public ResponseEntity<Order> createOrder(@Valid @RequestBody CreateOrderRequest request) {
+            
         logger.info("Creating order for product: {}, quantity: {}", request.getProductId(), request.getQuantity());
 
-        Order order = new Order();
-        order.setProductId(request.getProductId());
-        order.setQuantity(request.getQuantity());
-        order.setStatus("CREATED");
-        order.setCreatedAt(Instant.now());
-
-        Order savedOrder = orderRepository.save(order);
+        // 1. Reserve Inventory
+        inventoryClient.reserveInventory(request.getProductId(), request.getQuantity());
         
-        logger.info("Created order successfully: {}", savedOrder.getOrderId());
-        return ResponseEntity
-                .created(URI.create("/api/orders/" + savedOrder.getOrderId()))
-                .body(savedOrder);
+        try {
+            // 2. Create Order
+            Order order = new Order();
+            order.setProductId(request.getProductId());
+            order.setQuantity(request.getQuantity());
+            order.setStatus("CREATED");
+            order.setCreatedAt(Instant.now());
+
+            Order savedOrder = orderRepository.save(order);
+            
+            logger.info("Created order successfully: {}", savedOrder.getOrderId());
+            return ResponseEntity
+                    .created(URI.create("/api/orders/" + savedOrder.getOrderId()))
+                    .body(savedOrder);
+                    
+        } catch (Exception e) {
+            logger.error("Order creation failed after successful inventory reservation. Attempting compensation.", e);
+            try {
+                inventoryClient.releaseInventory(request.getProductId(), request.getQuantity());
+            } catch (Exception ex) {
+                logger.error("Compensation failed to execute cleanly", ex);
+            }
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Order creation failed", e);
+        }
     }
 
     @GetMapping("/{id}")
