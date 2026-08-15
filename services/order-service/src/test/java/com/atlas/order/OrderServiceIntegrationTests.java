@@ -1,6 +1,7 @@
 package com.atlas.order;
 
 import com.atlas.order.client.InventoryClient;
+import com.atlas.order.client.PaymentClient;
 import com.atlas.order.controller.OrderController;
 import com.atlas.order.domain.Order;
 import com.atlas.order.dto.CreateOrderRequest;
@@ -37,25 +38,30 @@ public class OrderServiceIntegrationTests {
     @MockBean
     private InventoryClient inventoryClient;
 
+    @MockBean
+    private PaymentClient paymentClient;
+
     @BeforeEach
     void setUp() {
-        Mockito.reset(inventoryClient);
+        Mockito.reset(inventoryClient, paymentClient);
         // Default happy path mock
         doNothing().when(inventoryClient).reserveInventory(anyString(), anyInt());
+        doNothing().when(paymentClient).authorizePayment(anyString(), anyDouble(), anyString(), anyString());
     }
 
     @Test
     void testCreateOrderSuccess() {
-        CreateOrderRequest request = new CreateOrderRequest("P100", 2);
+        CreateOrderRequest request = new CreateOrderRequest("P100", 1);
         
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Correlation-ID", "TEST-CORR-123");
         HttpEntity<CreateOrderRequest> entity = new HttpEntity<>(request, headers);
 
-        ResponseEntity<Order> response = restTemplate.postForEntity("/api/orders", entity, Order.class);
+        ResponseEntity<String> response = restTemplate.postForEntity("/api/orders", entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        verify(inventoryClient).reserveInventory("P100", 2);
+        verify(inventoryClient).reserveInventory("P100", 1);
+        verify(paymentClient).authorizePayment(anyString(), eq(1000.0), anyString(), eq("TEST-CORR-123"));
     }
 
     @Test
@@ -115,15 +121,63 @@ public class OrderServiceIntegrationTests {
     }
 
     @Test
+    void testPayment402Returns402AndCompensates() {
+        doThrow(new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "Payment declined"))
+            .when(paymentClient).authorizePayment(anyString(), anyDouble(), anyString(), anyString());
+            
+        CreateOrderRequest request = new CreateOrderRequest("P200", 1);
+        ResponseEntity<String> response = restTemplate.postForEntity("/api/orders", request, String.class);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYMENT_REQUIRED);
+        verify(inventoryClient).releaseInventory("P200", 1);
+    }
+
+    @Test
+    void testPayment503Returns503AndCompensates() {
+        doThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payment unavailable"))
+            .when(paymentClient).authorizePayment(anyString(), anyDouble(), anyString(), anyString());
+            
+        CreateOrderRequest request = new CreateOrderRequest("P200", 1);
+        ResponseEntity<String> response = restTemplate.postForEntity("/api/orders", request, String.class);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        verify(inventoryClient).releaseInventory("P200", 1);
+    }
+
+    @Test
+    void testPayment504Returns504AndCompensates() {
+        doThrow(new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "Payment timeout"))
+            .when(paymentClient).authorizePayment(anyString(), anyDouble(), anyString(), anyString());
+            
+        CreateOrderRequest request = new CreateOrderRequest("P200", 1);
+        ResponseEntity<String> response = restTemplate.postForEntity("/api/orders", request, String.class);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+        verify(inventoryClient).releaseInventory("P200", 1);
+    }
+
+    @Test
+    void testPayment500Returns502AndCompensates() {
+        doThrow(new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Payment server error"))
+            .when(paymentClient).authorizePayment(anyString(), anyDouble(), anyString(), anyString());
+            
+        CreateOrderRequest request = new CreateOrderRequest("P200", 1);
+        ResponseEntity<String> response = restTemplate.postForEntity("/api/orders", request, String.class);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        verify(inventoryClient).releaseInventory("P200", 1);
+    }
+
+    @Test
     void testCompensationOnOrderCreationFailure() {
         // We use a mock of OrderRepository to simulate failure after inventory is reserved
         OrderRepository mockRepository = Mockito.mock(OrderRepository.class);
         when(mockRepository.save(any())).thenThrow(new RuntimeException("Simulated order creation failure"));
         
         // Temporarily replace the real repository with the mock for this test
-        OrderController testController = new OrderController(mockRepository, inventoryClient);
+        OrderController testController = new OrderController(mockRepository, inventoryClient, paymentClient);
         
-        CreateOrderRequest request = new CreateOrderRequest("P100", 2);
+        CreateOrderRequest request = new CreateOrderRequest("P100", 1);
         try {
             testController.createOrder(request);
         } catch (org.springframework.web.server.ResponseStatusException ex) {
@@ -131,9 +185,11 @@ public class OrderServiceIntegrationTests {
         }
         
         // Verify reserve was called
-        verify(inventoryClient).reserveInventory("P100", 2);
+        verify(inventoryClient).reserveInventory("P100", 1);
+        // Verify payment was called
+        verify(paymentClient).authorizePayment(anyString(), eq(1000.0), anyString(), anyString());
         // Verify release was called (Compensation)
-        verify(inventoryClient).releaseInventory("P100", 2);
+        verify(inventoryClient).releaseInventory("P100", 1);
     }
     
     @Test
@@ -145,7 +201,7 @@ public class OrderServiceIntegrationTests {
         // If compensation itself throws, it should still return the original error and not crash.
         doThrow(new RuntimeException("Release failed")).when(inventoryClient).releaseInventory("P100", 2);
         
-        OrderController testController = new OrderController(mockRepository, inventoryClient);
+        OrderController testController = new OrderController(mockRepository, inventoryClient, paymentClient);
         
         CreateOrderRequest request = new CreateOrderRequest("P100", 2);
         try {
@@ -160,8 +216,8 @@ public class OrderServiceIntegrationTests {
     @Test
     void testGetExistingOrder() {
         CreateOrderRequest request = new CreateOrderRequest("P200", 5);
-        ResponseEntity<Order> createResponse = restTemplate.postForEntity("/api/orders", request, Order.class);
-        String orderId = createResponse.getBody().getOrderId();
+        ResponseEntity<String> createResponse = restTemplate.postForEntity("/api/orders", request, String.class);
+        String orderId = createResponse.getBody();
 
         ResponseEntity<Order> getResponse = restTemplate.getForEntity("/api/orders/" + orderId, Order.class);
         assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -227,7 +283,7 @@ public class OrderServiceIntegrationTests {
         CreateOrderRequest request = new CreateOrderRequest("P100", 2);
         HttpEntity<CreateOrderRequest> entity = new HttpEntity<>(request);
 
-        ResponseEntity<Order> response = restTemplate.postForEntity("/api/orders", entity, Order.class);
+        ResponseEntity<String> response = restTemplate.postForEntity("/api/orders", entity, String.class);
         String correlationId = response.getHeaders().getFirst("X-Correlation-ID");
         
         assertThat(correlationId).isNotNull().isNotEmpty();
@@ -240,13 +296,13 @@ public class OrderServiceIntegrationTests {
         CountDownLatch latch = new CountDownLatch(numberOfThreads);
         
         Set<String> orderIds = ConcurrentHashMap.newKeySet();
-        List<Future<ResponseEntity<Order>>> futures = new ArrayList<>();
+        List<Future<ResponseEntity<String>>> futures = new ArrayList<>();
 
         for (int i = 0; i < numberOfThreads; i++) {
             futures.add(executorService.submit(() -> {
                 try {
                     CreateOrderRequest request = new CreateOrderRequest("CONCURRENT-PROD", 1);
-                    return restTemplate.postForEntity("/api/orders", request, Order.class);
+                    return restTemplate.postForEntity("/api/orders", request, String.class);
                 } finally {
                     latch.countDown();
                 }
@@ -256,11 +312,11 @@ public class OrderServiceIntegrationTests {
         latch.await();
         executorService.shutdown();
 
-        for (Future<ResponseEntity<Order>> future : futures) {
+        for (Future<ResponseEntity<String>> future : futures) {
             try {
-                ResponseEntity<Order> response = future.get();
+                ResponseEntity<String> response = future.get();
                 assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-                orderIds.add(response.getBody().getOrderId());
+                orderIds.add(response.getBody());
             } catch (ExecutionException e) {
                 throw new RuntimeException(e);
             }

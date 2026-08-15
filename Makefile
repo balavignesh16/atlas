@@ -13,6 +13,8 @@ build:
 	cd services/order-service && mvn clean package -DskipTests
 	@echo "Building Inventory Service..."
 	cd services/inventory-service && mvn clean package -DskipTests
+	@echo "Building Payment Service..."
+	cd services/payment-service && mvn clean package -DskipTests
 
 test:
 	@echo "Testing Control Plane..."
@@ -27,6 +29,8 @@ test:
 	cd services/order-service && mvn test
 	@echo "Testing Inventory Service..."
 	cd services/inventory-service && mvn test
+	@echo "Testing Payment Service..."
+	cd services/payment-service && mvn test
 
 lint:
 	@echo "Formatting Go code..."
@@ -47,6 +51,7 @@ docker-build:
 	cd services/gateway && mvn clean package -DskipTests
 	cd services/order-service && mvn clean package -DskipTests
 	cd services/inventory-service && mvn clean package -DskipTests
+	cd services/payment-service && mvn clean package -DskipTests
 	docker-compose build
 
 docker-up:
