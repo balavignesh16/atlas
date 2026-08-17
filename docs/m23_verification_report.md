@@ -279,5 +279,14 @@ Extracting incoming and outgoing dependencies for `atlas-order-service`:
 * **Bounded Memory**: Expiration routines successfully clean up expired trace elements and graphs based on `ATLAS_CORRELATION_RETENTION_SECONDS`.
 * **Resilience Verification**: During `Intelligence Engine` stopping and restarting, `atlas-order-service` continued gracefully. Business logic was fundamentally unaffected by the OpenTelemetry backend outage.
 
+## 8. Self-Edge Validation Correction
+Following a manual graph review, it was observed that self-edges (e.g. `atlas-order-service -> atlas-order-service`) were being reconstructed due to intra-service parent-child span pairs. 
+
+A correctness patch was applied at the root of `DependencyGraph.AddDependency` ensuring that `sourceService == targetService` is explicitly ignored. 
+The M2.3 implementation has been re-verified locally and via E2E scripts proving:
+1. `atlas-order-service` -> `atlas-inventory-service` is correctly preserved.
+2. `atlas-gateway` -> `atlas-order-service` is correctly preserved.
+3. **Zero** self-edges are constructed or aggregated in the topology graph.
+
 ## Conclusion
 The **ATLAS M2.3 Correlation and Dependency Reconstruction** capability has been fully integrated into the Intelligence Engine using deterministic models based purely on observed facts. The system operates autonomously, aggressively cleans expired correlation state, reconstructs bidirectional traces dynamically, and presents aggregated topologies correctly. No external RCA dependencies, persistence, or assumptions were integrated.

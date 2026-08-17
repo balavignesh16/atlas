@@ -138,9 +138,8 @@ func (e *Engine) resolveDependency(t *traceInternal, parent, child *correlationm
 		return
 	}
 	if parent.ServiceName == child.ServiceName {
-		// Exclude internal service-to-service self calls from dependency graph (often just internal spans)
-		// Or maybe keep them? The prompt doesn't forbid internal. But usually edges are between different services.
-		// Let's allow them but deduplicate.
+		// Exclude internal service-to-service self calls from dependency graph
+		return
 	}
 
 	edgeIdentifier := fmt.Sprintf("%s->%s", parent.ServiceName, child.ServiceName)

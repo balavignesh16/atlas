@@ -39,6 +39,28 @@ func TestAddDependencyAndAggregation(t *testing.T) {
 	}
 }
 
+func TestIgnoreSelfDependency(t *testing.T) {
+	g := graph.NewDependencyGraph(300)
+
+	g.AddDependency("atlas-order-service", "atlas-order-service", 100, false, "OK")
+	g.AddDependency("atlas-gateway", "atlas-gateway", 100, false, "OK")
+	
+	g.AddDependency("atlas-gateway", "atlas-order-service", 10, false, "OK")
+	g.AddDependency("atlas-order-service", "atlas-payment-service", 20, false, "OK")
+	g.AddDependency("atlas-order-service", "atlas-inventory-service", 15, false, "OK")
+
+	snapshot := g.GetSnapshot()
+	if len(snapshot.Edges) != 3 {
+		t.Fatalf("Expected exactly 3 valid cross-service edges, got %d", len(snapshot.Edges))
+	}
+
+	for _, edge := range snapshot.Edges {
+		if edge.SourceService == edge.TargetService {
+			t.Errorf("Found invalid self-edge: %s -> %s", edge.SourceService, edge.TargetService)
+		}
+	}
+}
+
 func TestGraphExpiration(t *testing.T) {
 	g := graph.NewDependencyGraph(1) // 1 second retention
 

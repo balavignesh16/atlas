@@ -34,7 +34,7 @@ func edgeKey(source, target string) string {
 
 // AddDependency records an observed relationship between two services.
 func (g *DependencyGraph) AddDependency(sourceService, targetService string, durationMs int64, isError bool, status string) {
-	if sourceService == "" || targetService == "" {
+	if sourceService == "" || targetService == "" || sourceService == targetService {
 		return
 	}
 

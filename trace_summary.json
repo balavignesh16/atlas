@@ -1,9 +1,9 @@
 ﻿{
-    "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
+    "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
     "root_service":  "atlas-gateway",
-    "start_time":  "2026-08-17T12:58:19.882715393Z",
-    "end_time":  "2026-08-17T12:58:20.147715393Z",
-    "duration_ms":  265,
+    "start_time":  "2026-08-17T15:21:25.862169679Z",
+    "end_time":  "2026-08-17T15:21:26.899169679Z",
+    "duration_ms":  1037,
     "span_count":  7,
     "service_count":  4,
     "services":  [
@@ -17,54 +17,34 @@
     "overall_status":  "UNSET",
     "spans":  [
                   {
-                      "span_id":  "3b2a7aa9306a176d",
-                      "parent_span_id":  "a08c873386c1d0fd",
-                      "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
+                      "span_id":  "0c35e945645ec759",
+                      "parent_span_id":  "2e5ebb5cde93abf3",
+                      "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
                       "service_name":  "atlas-order-service",
                       "operation_name":  "http post",
-                      "start_time":  "2026-08-17T12:58:20.061898294Z",
-                      "end_time":  "2026-08-17T12:58:20.139898294Z",
-                      "duration_ms":  78,
+                      "start_time":  "2026-08-17T15:21:26.16314799Z",
+                      "end_time":  "2026-08-17T15:21:26.46314799Z",
+                      "duration_ms":  300,
                       "status":  "UNSET",
                       "attributes":  {
-                                         "client.name":  "payment-service",
+                                         "client.name":  "inventory-service",
                                          "exception":  "none",
-                                         "http.url":  "http://payment-service:8086/api/payments",
+                                         "http.url":  "http://inventory-service:8085/api/inventory/P100/reserve",
                                          "method":  "POST",
                                          "outcome":  "SUCCESS",
-                                         "status":  "201",
-                                         "uri":  "/api/payments"
+                                         "status":  "200",
+                                         "uri":  "/api/inventory/{productId}/reserve"
                                      }
                   },
                   {
-                      "span_id":  "a08c873386c1d0fd",
-                      "parent_span_id":  "f5eed80c8012615d",
-                      "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
-                      "service_name":  "atlas-order-service",
-                      "operation_name":  "http post /api/orders",
-                      "start_time":  "2026-08-17T12:58:19.909558325Z",
-                      "end_time":  "2026-08-17T12:58:20.141558325Z",
-                      "duration_ms":  232,
-                      "status":  "UNSET",
-                      "attributes":  {
-                                         "correlation_id":  "ATLAS-M23-TRACE-PROOF",
-                                         "exception":  "none",
-                                         "http.url":  "/api/orders",
-                                         "method":  "POST",
-                                         "outcome":  "SUCCESS",
-                                         "status":  "201",
-                                         "uri":  "/api/orders"
-                                     }
-                  },
-                  {
-                      "span_id":  "f5eed80c8012615d",
-                      "parent_span_id":  "d0555f2896cd16c4",
-                      "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
+                      "span_id":  "f72196cf398d3e96",
+                      "parent_span_id":  "696cc95a9b1abead",
+                      "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
                       "service_name":  "atlas-gateway",
                       "operation_name":  "http post",
-                      "start_time":  "2026-08-17T12:58:19.902583671Z",
-                      "end_time":  "2026-08-17T12:58:20.145583671Z",
-                      "duration_ms":  243,
+                      "start_time":  "2026-08-17T15:21:25.888674753Z",
+                      "end_time":  "2026-08-17T15:21:26.896674753Z",
+                      "duration_ms":  1008,
                       "status":  "UNSET",
                       "attributes":  {
                                          "client.name":  "order-service",
@@ -77,14 +57,14 @@
                                      }
                   },
                   {
-                      "span_id":  "d0555f2896cd16c4",
+                      "span_id":  "696cc95a9b1abead",
                       "parent_span_id":  "",
-                      "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
+                      "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
                       "service_name":  "atlas-gateway",
                       "operation_name":  "http post /api/orders",
-                      "start_time":  "2026-08-17T12:58:19.882715393Z",
-                      "end_time":  "2026-08-17T12:58:20.147715393Z",
-                      "duration_ms":  265,
+                      "start_time":  "2026-08-17T15:21:25.862169679Z",
+                      "end_time":  "2026-08-17T15:21:26.899169679Z",
+                      "duration_ms":  1037,
                       "status":  "UNSET",
                       "attributes":  {
                                          "correlation_id":  "ATLAS-M23-TRACE-PROOF",
@@ -97,14 +77,33 @@
                                      }
                   },
                   {
-                      "span_id":  "4109fd0c2ac4367e",
-                      "parent_span_id":  "3b2a7aa9306a176d",
-                      "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
+                      "span_id":  "33da48bc8f03a010",
+                      "parent_span_id":  "0c35e945645ec759",
+                      "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
+                      "service_name":  "atlas-inventory-service",
+                      "operation_name":  "http post /api/inventory/{productId}/reserve",
+                      "start_time":  "2026-08-17T15:21:26.265634052Z",
+                      "end_time":  "2026-08-17T15:21:26.461634052Z",
+                      "duration_ms":  196,
+                      "status":  "UNSET",
+                      "attributes":  {
+                                         "exception":  "none",
+                                         "http.url":  "/api/inventory/P100/reserve",
+                                         "method":  "POST",
+                                         "outcome":  "SUCCESS",
+                                         "status":  "200",
+                                         "uri":  "/api/inventory/{productId}/reserve"
+                                     }
+                  },
+                  {
+                      "span_id":  "f3fb05ce47ca6b81",
+                      "parent_span_id":  "9d7e8871b1da8da8",
+                      "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
                       "service_name":  "atlas-payment-service",
                       "operation_name":  "http post /api/payments",
-                      "start_time":  "2026-08-17T12:58:20.066894149Z",
-                      "end_time":  "2026-08-17T12:58:20.138894149Z",
-                      "duration_ms":  72,
+                      "start_time":  "2026-08-17T15:21:26.561559174Z",
+                      "end_time":  "2026-08-17T15:21:26.876559174Z",
+                      "duration_ms":  315,
                       "status":  "UNSET",
                       "attributes":  {
                                          "correlation_id":  "ATLAS-M23-TRACE-PROOF",
@@ -117,42 +116,43 @@
                                      }
                   },
                   {
-                      "span_id":  "9b0a206381a4a539",
-                      "parent_span_id":  "653c9a40b12deb38",
-                      "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
-                      "service_name":  "atlas-inventory-service",
-                      "operation_name":  "http post /api/inventory/{productId}/reserve",
-                      "start_time":  "2026-08-17T12:58:19.995105803Z",
-                      "end_time":  "2026-08-17T12:58:20.057105803Z",
-                      "duration_ms":  62,
+                      "span_id":  "9d7e8871b1da8da8",
+                      "parent_span_id":  "2e5ebb5cde93abf3",
+                      "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
+                      "service_name":  "atlas-order-service",
+                      "operation_name":  "http post",
+                      "start_time":  "2026-08-17T15:21:26.466377968Z",
+                      "end_time":  "2026-08-17T15:21:26.877377968Z",
+                      "duration_ms":  411,
                       "status":  "UNSET",
                       "attributes":  {
+                                         "client.name":  "payment-service",
                                          "exception":  "none",
-                                         "http.url":  "/api/inventory/P100/reserve",
+                                         "http.url":  "http://payment-service:8086/api/payments",
                                          "method":  "POST",
                                          "outcome":  "SUCCESS",
-                                         "status":  "200",
-                                         "uri":  "/api/inventory/{productId}/reserve"
+                                         "status":  "201",
+                                         "uri":  "/api/payments"
                                      }
                   },
                   {
-                      "span_id":  "653c9a40b12deb38",
-                      "parent_span_id":  "a08c873386c1d0fd",
-                      "trace_id":  "f3bb7b4ef80f944d529e3bfbeea0f9cc",
+                      "span_id":  "2e5ebb5cde93abf3",
+                      "parent_span_id":  "f72196cf398d3e96",
+                      "trace_id":  "8edc114f6ed18f3c68d86de946360da2",
                       "service_name":  "atlas-order-service",
-                      "operation_name":  "http post",
-                      "start_time":  "2026-08-17T12:58:19.987234966Z",
-                      "end_time":  "2026-08-17T12:58:20.060234966Z",
-                      "duration_ms":  73,
+                      "operation_name":  "http post /api/orders",
+                      "start_time":  "2026-08-17T15:21:25.987363493Z",
+                      "end_time":  "2026-08-17T15:21:26.893363493Z",
+                      "duration_ms":  906,
                       "status":  "UNSET",
                       "attributes":  {
-                                         "client.name":  "inventory-service",
+                                         "correlation_id":  "ATLAS-M23-TRACE-PROOF",
                                          "exception":  "none",
-                                         "http.url":  "http://inventory-service:8085/api/inventory/P100/reserve",
+                                         "http.url":  "/api/orders",
                                          "method":  "POST",
                                          "outcome":  "SUCCESS",
-                                         "status":  "200",
-                                         "uri":  "/api/inventory/{productId}/reserve"
+                                         "status":  "201",
+                                         "uri":  "/api/orders"
                                      }
                   }
               ]

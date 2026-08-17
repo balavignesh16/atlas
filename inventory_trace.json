@@ -1,9 +1,9 @@
 ﻿{
-    "trace_id":  "68a87a73754c5f9b9e647a13294ed502",
+    "trace_id":  "92cd7cd8a84991e427b9992b31654407",
     "root_service":  "atlas-gateway",
-    "start_time":  "2026-08-17T12:58:22.17986394Z",
-    "end_time":  "2026-08-17T12:58:22.20886394Z",
-    "duration_ms":  29,
+    "start_time":  "2026-08-17T15:21:29.014127353Z",
+    "end_time":  "2026-08-17T15:21:29.069127353Z",
+    "duration_ms":  55,
     "span_count":  5,
     "service_count":  3,
     "services":  [
@@ -16,14 +16,14 @@
     "overall_status":  "ERROR",
     "spans":  [
                   {
-                      "span_id":  "6b61dcbba5348b03",
-                      "parent_span_id":  "209eab94bf178e91",
-                      "trace_id":  "68a87a73754c5f9b9e647a13294ed502",
+                      "span_id":  "edbb2b5f983538a2",
+                      "parent_span_id":  "dc4e05747b435748",
+                      "trace_id":  "92cd7cd8a84991e427b9992b31654407",
                       "service_name":  "atlas-inventory-service",
                       "operation_name":  "http post /api/inventory/{productId}/reserve",
-                      "start_time":  "2026-08-17T12:58:22.189015864Z",
-                      "end_time":  "2026-08-17T12:58:22.195015864Z",
-                      "duration_ms":  6,
+                      "start_time":  "2026-08-17T15:21:29.029402612Z",
+                      "end_time":  "2026-08-17T15:21:29.045402612Z",
+                      "duration_ms":  16,
                       "status":  "UNSET",
                       "attributes":  {
                                          "exception":  "none",
@@ -35,14 +35,14 @@
                                      }
                   },
                   {
-                      "span_id":  "209eab94bf178e91",
-                      "parent_span_id":  "83c720c10715888c",
-                      "trace_id":  "68a87a73754c5f9b9e647a13294ed502",
+                      "span_id":  "dc4e05747b435748",
+                      "parent_span_id":  "2ec4ca567c807bb8",
+                      "trace_id":  "92cd7cd8a84991e427b9992b31654407",
                       "service_name":  "atlas-order-service",
                       "operation_name":  "http post",
-                      "start_time":  "2026-08-17T12:58:22.185888229Z",
-                      "end_time":  "2026-08-17T12:58:22.197888229Z",
-                      "duration_ms":  12,
+                      "start_time":  "2026-08-17T15:21:29.024557776Z",
+                      "end_time":  "2026-08-17T15:21:29.050557776Z",
+                      "duration_ms":  26,
                       "status":  "ERROR",
                       "attributes":  {
                                          "client.name":  "inventory-service",
@@ -55,14 +55,14 @@
                                      }
                   },
                   {
-                      "span_id":  "83c720c10715888c",
-                      "parent_span_id":  "0237dc0b0a738470",
-                      "trace_id":  "68a87a73754c5f9b9e647a13294ed502",
+                      "span_id":  "2ec4ca567c807bb8",
+                      "parent_span_id":  "289f54ed34511883",
+                      "trace_id":  "92cd7cd8a84991e427b9992b31654407",
                       "service_name":  "atlas-order-service",
                       "operation_name":  "http post /api/orders",
-                      "start_time":  "2026-08-17T12:58:22.183828668Z",
-                      "end_time":  "2026-08-17T12:58:22.200828668Z",
-                      "duration_ms":  17,
+                      "start_time":  "2026-08-17T15:21:29.020672345Z",
+                      "end_time":  "2026-08-17T15:21:29.056672345Z",
+                      "duration_ms":  36,
                       "status":  "UNSET",
                       "attributes":  {
                                          "correlation_id":  "ATLAS-M23-INVENTORY-PROOF",
@@ -75,14 +75,14 @@
                                      }
                   },
                   {
-                      "span_id":  "0237dc0b0a738470",
-                      "parent_span_id":  "506913612cfaf260",
-                      "trace_id":  "68a87a73754c5f9b9e647a13294ed502",
+                      "span_id":  "289f54ed34511883",
+                      "parent_span_id":  "6a08d02232b016b2",
+                      "trace_id":  "92cd7cd8a84991e427b9992b31654407",
                       "service_name":  "atlas-gateway",
                       "operation_name":  "http post",
-                      "start_time":  "2026-08-17T12:58:22.18104679Z",
-                      "end_time":  "2026-08-17T12:58:22.20604679Z",
-                      "duration_ms":  25,
+                      "start_time":  "2026-08-17T15:21:29.0170118Z",
+                      "end_time":  "2026-08-17T15:21:29.0640118Z",
+                      "duration_ms":  47,
                       "status":  "ERROR",
                       "attributes":  {
                                          "client.name":  "order-service",
@@ -95,14 +95,14 @@
                                      }
                   },
                   {
-                      "span_id":  "506913612cfaf260",
+                      "span_id":  "6a08d02232b016b2",
                       "parent_span_id":  "",
-                      "trace_id":  "68a87a73754c5f9b9e647a13294ed502",
+                      "trace_id":  "92cd7cd8a84991e427b9992b31654407",
                       "service_name":  "atlas-gateway",
                       "operation_name":  "http post /api/orders",
-                      "start_time":  "2026-08-17T12:58:22.17986394Z",
-                      "end_time":  "2026-08-17T12:58:22.20886394Z",
-                      "duration_ms":  29,
+                      "start_time":  "2026-08-17T15:21:29.014127353Z",
+                      "end_time":  "2026-08-17T15:21:29.069127353Z",
+                      "duration_ms":  55,
                       "status":  "UNSET",
                       "attributes":  {
                                          "correlation_id":  "ATLAS-M23-INVENTORY-PROOF",

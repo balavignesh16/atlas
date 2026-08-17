@@ -3,26 +3,13 @@
                      {
                          "source":  "atlas-gateway",
                          "target":  "atlas-order-service",
-                         "call_count":  8,
-                         "first_observed":  "2026-08-17T12:58:22.073924099Z",
-                         "last_observed":  "2026-08-17T12:58:27.744363333Z",
-                         "average_duration_ms":  1131,
+                         "call_count":  7,
+                         "first_observed":  "2026-08-17T15:21:31.954378121Z",
+                         "last_observed":  "2026-08-17T15:21:32.405041585Z",
+                         "average_duration_ms":  155,
                          "error_count":  0,
                          "status_counts":  {
-                                               "UNSET":  8
-                                           }
-                     },
-                     {
-                         "source":  "atlas-order-service",
-                         "target":  "atlas-order-service",
-                         "call_count":  16,
-                         "first_observed":  "2026-08-17T12:58:21.72049732Z",
-                         "last_observed":  "2026-08-17T12:58:27.391577236Z",
-                         "average_duration_ms":  558,
-                         "error_count":  2,
-                         "status_counts":  {
-                                               "ERROR":  2,
-                                               "UNSET":  14
+                                               "UNSET":  7
                                            }
                      }
                  ],
@@ -30,38 +17,25 @@
                      {
                          "source":  "atlas-order-service",
                          "target":  "atlas-inventory-service",
-                         "call_count":  9,
-                         "first_observed":  "2026-08-17T12:58:21.720490277Z",
-                         "last_observed":  "2026-08-17T12:58:27.391571822Z",
-                         "average_duration_ms":  9,
+                         "call_count":  8,
+                         "first_observed":  "2026-08-17T15:21:29.53624152Z",
+                         "last_observed":  "2026-08-17T15:21:34.551574033Z",
+                         "average_duration_ms":  29,
                          "error_count":  0,
                          "status_counts":  {
-                                               "UNSET":  9
+                                               "UNSET":  8
                                            }
                      },
                      {
                          "source":  "atlas-order-service",
                          "target":  "atlas-payment-service",
-                         "call_count":  5,
-                         "first_observed":  "2026-08-17T12:58:21.720495893Z",
-                         "last_observed":  "2026-08-17T12:58:27.3915634Z",
-                         "average_duration_ms":  16,
+                         "call_count":  6,
+                         "first_observed":  "2026-08-17T15:21:31.954348483Z",
+                         "last_observed":  "2026-08-17T15:21:31.954450413Z",
+                         "average_duration_ms":  56,
                          "error_count":  0,
                          "status_counts":  {
-                                               "UNSET":  5
-                                           }
-                     },
-                     {
-                         "source":  "atlas-order-service",
-                         "target":  "atlas-order-service",
-                         "call_count":  16,
-                         "first_observed":  "2026-08-17T12:58:21.72049732Z",
-                         "last_observed":  "2026-08-17T12:58:27.391577236Z",
-                         "average_duration_ms":  558,
-                         "error_count":  2,
-                         "status_counts":  {
-                                               "ERROR":  2,
-                                               "UNSET":  14
+                                               "UNSET":  6
                                            }
                      }
                  ],
