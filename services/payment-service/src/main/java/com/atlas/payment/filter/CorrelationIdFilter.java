@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.UUID;
+import io.opentelemetry.api.trace.Span;
 
 @Component
 public class CorrelationIdFilter implements Filter {
@@ -33,6 +34,7 @@ public class CorrelationIdFilter implements Filter {
 
         MDC.put(MDC_CORRELATION_ID_KEY, correlationId);
         httpResponse.setHeader(CORRELATION_ID_HEADER, correlationId);
+        Span.current().setAttribute("correlation_id", correlationId);
 
         try {
             chain.doFilter(request, response);

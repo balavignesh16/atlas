@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 @Component
 public class PaymentClient {
@@ -18,7 +19,10 @@ public class PaymentClient {
 
     public PaymentClient(RestClient.Builder restClientBuilder,
                          @Value("${payment.service.url:http://localhost:8086}") String paymentServiceUrl) {
-        this.restClient = restClientBuilder.build();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(2000);
+        factory.setReadTimeout(5000);
+        this.restClient = restClientBuilder.requestFactory(factory).build();
         this.paymentServiceUrl = paymentServiceUrl;
     }
 

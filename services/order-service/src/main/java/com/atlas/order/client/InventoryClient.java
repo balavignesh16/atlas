@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.util.Map;
 
@@ -21,7 +22,10 @@ public class InventoryClient {
     private final RestClient restClient;
 
     public InventoryClient(RestClient.Builder builder, @Value("${inventory.service.url:http://localhost:8085}") String inventoryUrl) {
-        this.restClient = builder.baseUrl(inventoryUrl).build();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(2000);
+        factory.setReadTimeout(5000);
+        this.restClient = builder.baseUrl(inventoryUrl).requestFactory(factory).build();
     }
 
     public void reserveInventory(String productId, int quantity) {

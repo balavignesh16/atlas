@@ -7,6 +7,10 @@ order:
     url: ${ORDER_SERVICE_URL:http://localhost:8084}
     timeout-ms: ${ORDER_SERVICE_TIMEOUT_MS:2000}
 
+spring:
+  application:
+    name: ${OTEL_SERVICE_NAME:atlas-gateway}
+
 management:
   endpoints:
     web:
@@ -17,3 +21,13 @@ management:
       show-details: always
       probes:
         enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://otel-collector:4318/v1/metrics}
+        step: 10s

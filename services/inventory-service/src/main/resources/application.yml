@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: inventory-service
+    name: ${OTEL_SERVICE_NAME:atlas-inventory-service}
 
 management:
   endpoints:
@@ -13,3 +13,13 @@ management:
   endpoint:
     health:
       show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://otel-collector:4318/v1/metrics}
+        step: 10s

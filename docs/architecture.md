@@ -1,26 +1,31 @@
-# ATLAS Architecture (M0)
+# ATLAS Architecture (M2.1)
 
 ## Overview
-This document outlines the architecture for the M0 Engineering Foundation of ATLAS. 
-The M0 scope is intentionally limited to the foundation layer.
+This document outlines the architecture for ATLAS LAB up to Milestone 2.1 (OpenTelemetry Foundation).
+The system consists of core ATLAS components and the ATLAS LAB business workload.
 
-## Services
-1. **Control Plane**
-   - Technology: Java 25, Spring Boot 4.1.x (or 3.4.x fallback)
-   - Role: The central management service for ATLAS (future). Currently provides a basic health check and structured logging.
-2. **Intelligence Engine**
-   - Technology: Go 1.26
-   - Role: Core intelligence platform for root-cause analysis (future). Currently provides a basic health check and structured logging.
-3. **ATLAS Agent**
-   - Technology: Go 1.26
-   - Role: Lightweight agent deployed alongside target services (future). Currently provides a basic health check and structured logging.
+## Business Workload (ATLAS LAB)
+1. **API Gateway (`atlas-gateway`)**: Spring Boot 3.4.2 API Gateway.
+2. **Order Service (`atlas-order-service`)**: Spring Boot 3.4.2 microservice coordinating orders.
+3. **Inventory Service (`atlas-inventory-service`)**: Spring Boot 3.4.2 microservice managing stock.
+4. **Payment Service (`atlas-payment-service`)**: Spring Boot 3.4.2 microservice handling payments and sandbox failures.
+
+## Core ATLAS Platform
+1. **Control Plane**: Central management service (Future).
+2. **Intelligence Engine**: Go 1.26 core intelligence platform (Future).
+3. **ATLAS Agent**: Go 1.26 lightweight agent deployed alongside target services (Future).
+
+## Observability Foundation
+- **OpenTelemetry Collector (`otel-collector`)**: Deployed alongside services to receive OTLP telemetry (traces and metrics).
+- **Instrumentation**: Spring Boot services use Micrometer Tracing bridged to OpenTelemetry.
+- **Context Propagation**: W3C `traceparent` headers are automatically injected into downstream requests.
 
 ## Communication
-In M0, services do not communicate with each other. They each expose an HTTP server with a health endpoint.
-
-## Data Storage & Eventing
-Currently, no data stores or event buses are implemented. Placeholders for PostgreSQL, Redis, and Kafka exist in the configuration templates for future milestones.
+- Client → Gateway → Order Service
+- Order Service → Inventory Service
+- Order Service → Payment Service
+- All Java Services → OpenTelemetry Collector (via OTLP HTTP/gRPC)
 
 ## Infrastructure
 - **Containerization**: All services are containerized using Docker multi-stage builds.
-- **Orchestration**: Docker Compose is used for local development and testing. Kubernetes deployment is out of scope for M0.
+- **Orchestration**: Docker Compose is used for local development, testing, and telemetry verification.

@@ -18,12 +18,12 @@ public class GatewayConfig {
     private String orderServiceUrl;
 
     @Bean
-    public RestClient restClient() {
+    public RestClient restClient(RestClient.Builder builder) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(timeoutMs);
         factory.setReadTimeout(timeoutMs);
         
-        return RestClient.builder()
+        return builder
                 .baseUrl(orderServiceUrl)
                 .requestFactory(factory)
                 .build();

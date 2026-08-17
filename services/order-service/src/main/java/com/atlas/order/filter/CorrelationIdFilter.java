@@ -10,6 +10,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.UUID;
+import io.opentelemetry.api.trace.Span;
 
 @Component
 public class CorrelationIdFilter extends OncePerRequestFilter {
@@ -28,6 +29,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
 
         MDC.put(CORRELATION_ID_KEY, correlationId);
         response.setHeader(CORRELATION_ID_HEADER, correlationId);
+        Span.current().setAttribute("correlation_id", correlationId);
 
         try {
             filterChain.doFilter(request, response);
