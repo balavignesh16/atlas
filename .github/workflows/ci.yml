@@ -34,7 +34,7 @@ jobs:
       run: cd services/intelligence-engine && go test -v ./...
 
     - name: Go Build (Intelligence Engine)
-      run: cd services/intelligence-engine && go build -o atlas-intelligence-engine .
+      run: cd services/intelligence-engine && go build -o atlas-intelligence-engine ./cmd/intelligence-engine
 
     - name: Go Format and Vet (ATLAS Agent)
       run: |
