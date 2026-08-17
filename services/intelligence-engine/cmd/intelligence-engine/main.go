@@ -27,6 +27,8 @@ import (
 	"github.com/atlas/intelligence-engine/internal/incidentsignal"
 	"github.com/atlas/intelligence-engine/internal/propagation"
 	"github.com/atlas/intelligence-engine/internal/rca"
+	"github.com/atlas/intelligence-engine/internal/remediation"
+	rmprovider "github.com/atlas/intelligence-engine/internal/remediation/provider"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -102,11 +104,26 @@ func main() {
 	}
 	aiEngine := aireasoning.NewEngine(aiCfg, aiProvider)
 
+	// M2.6 Initialization
+	rmCfg := remediation.Config{
+		Enabled:          os.Getenv("ATLAS_AI_ENABLED") != "false",
+		Provider:         os.Getenv("ATLAS_AI_PROVIDER"),
+		RetentionSeconds: 3600,
+	}
+	var rmProv remediation.RemediationPlannerProvider
+	if rmCfg.Provider == "gemini" {
+		rmProv = rmprovider.NewAIPlanner(os.Getenv("ATLAS_AI_ENDPOINT"), os.Getenv("ATLAS_AI_MODEL"))
+	} else {
+		rmProv = rmprovider.NewFakePlanner()
+	}
+	rmPlanner := remediation.NewPlanner(rmCfg, rmProv)
+
 	otlpHandler := ingestion.NewOTLPHandler(eventBuffer, corrEngine, detector)
 	apiHandler := httpapi.NewVerificationAPI(eventBuffer)
 	corrAPI := httpapi.NewCorrelationAPI(corrEngine)
 	graphAPI := httpapi.NewGraphAPI(depGraph)
 	incidentAPI := httpapi.NewIncidentAPI(incManager, evStore, rcaEngine, corrEngine, aiEngine, depGraph)
+	remediationAPI := httpapi.NewRemediationAPI(incManager, evStore, aiEngine, rmPlanner)
 
 	go func() {
 		for sig := range signalsChan {
@@ -138,6 +155,7 @@ func main() {
 			depGraph.CleanupExpired(now)
 			evStore.CleanupExpired(incidentmanager.DefaultConfig().RetentionSeconds)
 			aiEngine.CleanupExpired(now)
+			rmPlanner.CleanupExpired(now)
 		}
 	}()
 
@@ -174,13 +192,53 @@ func main() {
 
 	// Incident APIs
 	mux.HandleFunc("/api/v1/incidents/", func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(r.URL.Path, "/")
 		if r.URL.Path == "/api/v1/incidents/open" {
 			incidentAPI.HandleGetOpenIncidents(w, r)
+			return
+		}
+		// Route remediation paths natively
+		// format: /api/v1/incidents/{incidentId}/remediation...
+		if len(parts) >= 6 && parts[5] == "remediation" {
+			id := parts[4]
+			if len(parts) == 7 && parts[6] == "plan" {
+				if r.Method == http.MethodPost {
+					remediationAPI.HandlePostPlan(w, r, id)
+				} else {
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+				return
+			}
+			if r.Method == http.MethodGet {
+				remediationAPI.HandleGetPlanByIncident(w, r, id)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
 			return
 		}
 		incidentAPI.HandleGetIncident(w, r)
 	})
 	mux.HandleFunc("/api/v1/incidents", incidentAPI.HandleGetIncidents)
+
+	// Remediation API (/api/v1/remediation/...)
+	mux.HandleFunc("/api/v1/remediation/", func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(r.URL.Path, "/")
+		if len(parts) >= 6 {
+			if parts[5] == "approve" && r.Method == http.MethodPost {
+				remediationAPI.HandleApprove(w, r)
+				return
+			}
+			if parts[5] == "reject" && r.Method == http.MethodPost {
+				remediationAPI.HandleReject(w, r)
+				return
+			}
+		}
+		if r.Method == http.MethodGet {
+			remediationAPI.HandleGetPlan(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
 
 	mux.HandleFunc("/api/v1/events/", func(w http.ResponseWriter, r *http.Request) {
 		// Route disambiguation since /api/v1/events/ prefix matches both ID and Trace
