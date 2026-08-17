@@ -18,6 +18,8 @@ import (
 	"github.com/atlas/intelligence-engine/internal/httpapi"
 	"github.com/atlas/intelligence-engine/internal/ingestion"
 	
+	"github.com/atlas/intelligence-engine/internal/aireasoning"
+	"github.com/atlas/intelligence-engine/internal/aireasoning/provider"
 	"github.com/atlas/intelligence-engine/internal/blast"
 	"github.com/atlas/intelligence-engine/internal/evidence"
 	"github.com/atlas/intelligence-engine/internal/incidentdetector"
@@ -79,11 +81,32 @@ func main() {
 	blastAnalyzer := blast.NewAnalyzer(corrEngine)
 	rcaEngine := rca.NewEngine(evStore, propAnalyzer, depGraph)
 
+	// M2.5 Initialization
+	aiCfg := aireasoning.Config{
+		Enabled:         os.Getenv("ATLAS_AI_ENABLED") != "false",
+		Provider:        os.Getenv("ATLAS_AI_PROVIDER"),
+		MaxEvents:       200,
+		MaxSpans:        200,
+		MaxServices:     50,
+		MaxAttributes:   50,
+		MaxStringLength: 1024,
+		TimeoutSeconds:  30,
+		RetentionSeconds: 3600,
+	}
+	var aiProvider aireasoning.ReasoningProvider
+	if aiCfg.Provider == "gemini" {
+		aiProvider = provider.NewGeminiProvider(os.Getenv("ATLAS_AI_ENDPOINT"), os.Getenv("ATLAS_AI_MODEL"))
+	} else {
+		// Default to FakeProvider for tests and fallback
+		aiProvider = provider.NewFakeProvider()
+	}
+	aiEngine := aireasoning.NewEngine(aiCfg, aiProvider)
+
 	otlpHandler := ingestion.NewOTLPHandler(eventBuffer, corrEngine, detector)
 	apiHandler := httpapi.NewVerificationAPI(eventBuffer)
 	corrAPI := httpapi.NewCorrelationAPI(corrEngine)
 	graphAPI := httpapi.NewGraphAPI(depGraph)
-	incidentAPI := httpapi.NewIncidentAPI(incManager, evStore, rcaEngine, corrEngine)
+	incidentAPI := httpapi.NewIncidentAPI(incManager, evStore, rcaEngine, corrEngine, aiEngine, depGraph)
 
 	go func() {
 		for sig := range signalsChan {
@@ -114,6 +137,7 @@ func main() {
 			corrEngine.CleanupExpired(now)
 			depGraph.CleanupExpired(now)
 			evStore.CleanupExpired(incidentmanager.DefaultConfig().RetentionSeconds)
+			aiEngine.CleanupExpired(now)
 		}
 	}()
 

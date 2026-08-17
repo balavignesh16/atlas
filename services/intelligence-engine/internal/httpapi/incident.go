@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/atlas/intelligence-engine/internal/aireasoning"
+	"github.com/atlas/intelligence-engine/internal/correlation"
 	"github.com/atlas/intelligence-engine/internal/evidence"
+	"github.com/atlas/intelligence-engine/internal/graph"
 	"github.com/atlas/intelligence-engine/internal/incidentmanager"
 	"github.com/atlas/intelligence-engine/internal/rca"
-	"github.com/atlas/intelligence-engine/internal/correlation"
 )
 
 type IncidentAPI struct {
@@ -16,14 +18,18 @@ type IncidentAPI struct {
 	evStore    *evidence.Store
 	rcaEngine  *rca.Engine
 	corrEngine *correlation.Engine
+	aiEngine   *aireasoning.Engine
+	depGraph   *graph.DependencyGraph // need graph for context
 }
 
-func NewIncidentAPI(manager *incidentmanager.Manager, evStore *evidence.Store, rcaEngine *rca.Engine, corrEngine *correlation.Engine) *IncidentAPI {
+func NewIncidentAPI(manager *incidentmanager.Manager, evStore *evidence.Store, rcaEngine *rca.Engine, corrEngine *correlation.Engine, aiEngine *aireasoning.Engine, depGraph *graph.DependencyGraph) *IncidentAPI {
 	return &IncidentAPI{
 		manager:    manager,
 		evStore:    evStore,
 		rcaEngine:  rcaEngine,
 		corrEngine: corrEngine,
+		aiEngine:   aiEngine,
+		depGraph:   depGraph,
 	}
 }
 
@@ -73,6 +79,22 @@ func (api *IncidentAPI) HandleGetIncident(w http.ResponseWriter, r *http.Request
 		}
 		if subpath == "timeline" {
 			api.handleGetTimeline(w, r, id)
+			return
+		}
+		if subpath == "analyze" {
+			if r.Method == http.MethodPost {
+				api.HandlePostAnalyze(w, r, id)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+		if subpath == "analysis" {
+			if r.Method == http.MethodGet {
+				api.HandleGetAnalysis(w, r, id)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
 			return
 		}
 	}
@@ -163,4 +185,57 @@ func (api *IncidentAPI) handleGetTimeline(w http.ResponseWriter, r *http.Request
 	// Sort evidences by timestamp...
 	// For now, return evidences as the timeline of the incident.
 	json.NewEncoder(w).Encode(evidences)
+}
+
+func (api *IncidentAPI) HandlePostAnalyze(w http.ResponseWriter, r *http.Request, id string) {
+	inc := api.manager.GetIncident(id)
+	if inc == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	evs := api.evStore.GetAll(inc.EvidenceIDs)
+	evidences := make([]*evidence.Evidence, len(evs))
+	for i := range evs {
+		evidences[i] = &evs[i]
+	}
+
+	var candidates []*rca.RCACandidate
+	if inc.RCA != nil {
+		candidates = []*rca.RCACandidate{
+			{Service: inc.RCA.Service, Score: inc.RCA.Score, Confidence: inc.RCA.Confidence},
+		}
+	}
+	edges := api.depGraph.GetEdges()
+
+	// Parse force flag from query if needed, default to false.
+	force := r.URL.Query().Get("force") == "true"
+
+	res, err := api.aiEngine.Analyze(inc, nil, evidences, candidates, edges, force)
+	if err != nil {
+		if err == aireasoning.ErrDisabled {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{
+				"status":  "DISABLED",
+				"message": "AI reasoning is disabled.",
+			})
+			return
+		}
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
+func (api *IncidentAPI) HandleGetAnalysis(w http.ResponseWriter, r *http.Request, id string) {
+	res, ok := api.aiEngine.GetAnalysis(id)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
 }
