@@ -1,0 +1,10 @@
+﻿{
+    "event_id":  "9cb244fb-c423-44c2-ac10-7bb50ae63f78",
+    "event_type":  "METRIC",
+    "timestamp":  "2026-08-17T11:57:01.38Z",
+    "service_name":  "atlas-order-service",
+    "metric_name":  "jvm.gc.live.data.size",
+    "metric_description":  "Size of long-lived heap memory pool after reclamation",
+    "metric_type":  "Gauge",
+    "unit":  "bytes"
+}

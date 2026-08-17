@@ -9,12 +9,23 @@ receivers:
 exporters:
   debug:
     verbosity: detailed
+  otlphttp:
+    endpoint: http://intelligence-engine:8081
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 120s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [debug, otlphttp]
     metrics:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [debug, otlphttp]

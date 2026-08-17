@@ -4,7 +4,7 @@ build:
 	@echo "Building Control Plane..."
 	cd services/control-plane && mvn clean package -DskipTests
 	@echo "Building Intelligence Engine..."
-	cd services/intelligence-engine && go build -o atlas-intelligence-engine .
+	cd services/intelligence-engine && go build -o atlas-intelligence-engine ./cmd/intelligence-engine
 	@echo "Building ATLAS Agent..."
 	cd agents/atlas-agent && go build -o atlas-agent .
 	@echo "Building Gateway..."
@@ -45,7 +45,7 @@ run:
 
 docker-build:
 	@echo "Building Linux binaries for Docker..."
-	cd services/intelligence-engine && set GOOS=linux&& set CGO_ENABLED=0&& go build -o atlas-intelligence-engine .
+	cd services/intelligence-engine && set GOOS=linux&& set CGO_ENABLED=0&& go build -o atlas-intelligence-engine ./cmd/intelligence-engine
 	cd agents/atlas-agent && set GOOS=linux&& set CGO_ENABLED=0&& go build -o atlas-agent .
 	cd services/control-plane && mvn clean package -DskipTests
 	cd services/gateway && mvn clean package -DskipTests

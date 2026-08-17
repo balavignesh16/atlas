@@ -1,0 +1,147 @@
+﻿[
+    {
+        "event_id":  "2c9ebbd8-94bb-422a-afd9-d3abafb35154",
+        "event_type":  "TRACE_SPAN",
+        "timestamp":  "2026-08-17T11:57:01.550075838Z",
+        "service_name":  "atlas-payment-service",
+        "trace_id":  "e69cfa55fa116e2def8bdfd2a4036d17",
+        "span_id":  "63985c02c3bb39cf",
+        "parent_span_id":  "234d1c6bbb01af35",
+        "operation_name":  "http post /api/payments",
+        "status":  "UNSET",
+        "duration_ms":  90,
+        "attributes":  {
+                           "correlation_id":  "ATLAS-M22-TRACE-PROOF",
+                           "exception":  "none",
+                           "http.url":  "/api/payments",
+                           "method":  "POST",
+                           "outcome":  "SUCCESS",
+                           "status":  "201",
+                           "uri":  "/api/payments"
+                       }
+    },
+    {
+        "event_id":  "a4b0aa15-ccb4-43aa-b362-5a2d7a1e3195",
+        "event_type":  "TRACE_SPAN",
+        "timestamp":  "2026-08-17T11:57:01.463466333Z",
+        "service_name":  "atlas-inventory-service",
+        "trace_id":  "e69cfa55fa116e2def8bdfd2a4036d17",
+        "span_id":  "4bf9c5ecbdda0dc7",
+        "parent_span_id":  "a8bdd0113cfde4cd",
+        "operation_name":  "http post /api/inventory/{productId}/reserve",
+        "status":  "UNSET",
+        "duration_ms":  76,
+        "attributes":  {
+                           "exception":  "none",
+                           "http.url":  "/api/inventory/P100/reserve",
+                           "method":  "POST",
+                           "outcome":  "SUCCESS",
+                           "status":  "200",
+                           "uri":  "/api/inventory/{productId}/reserve"
+                       }
+    },
+    {
+        "event_id":  "4e5c6eb9-cc78-4c6c-800c-1a9b5ae6d3c8",
+        "event_type":  "TRACE_SPAN",
+        "timestamp":  "2026-08-17T11:57:01.45421417Z",
+        "service_name":  "atlas-order-service",
+        "trace_id":  "e69cfa55fa116e2def8bdfd2a4036d17",
+        "span_id":  "a8bdd0113cfde4cd",
+        "parent_span_id":  "c569dd8099c96289",
+        "operation_name":  "http post",
+        "status":  "UNSET",
+        "duration_ms":  88,
+        "attributes":  {
+                           "client.name":  "inventory-service",
+                           "exception":  "none",
+                           "http.url":  "http://inventory-service:8085/api/inventory/P100/reserve",
+                           "method":  "POST",
+                           "outcome":  "SUCCESS",
+                           "status":  "200",
+                           "uri":  "/api/inventory/{productId}/reserve"
+                       }
+    },
+    {
+        "event_id":  "530dfe17-8f67-4e14-8ac4-09040dd460fa",
+        "event_type":  "TRACE_SPAN",
+        "timestamp":  "2026-08-17T11:57:01.543830986Z",
+        "service_name":  "atlas-order-service",
+        "trace_id":  "e69cfa55fa116e2def8bdfd2a4036d17",
+        "span_id":  "234d1c6bbb01af35",
+        "parent_span_id":  "c569dd8099c96289",
+        "operation_name":  "http post",
+        "status":  "UNSET",
+        "duration_ms":  97,
+        "attributes":  {
+                           "client.name":  "payment-service",
+                           "exception":  "none",
+                           "http.url":  "http://payment-service:8086/api/payments",
+                           "method":  "POST",
+                           "outcome":  "SUCCESS",
+                           "status":  "201",
+                           "uri":  "/api/payments"
+                       }
+    },
+    {
+        "event_id":  "b21b48b5-1dc1-417a-8892-839f67f7ccd5",
+        "event_type":  "TRACE_SPAN",
+        "timestamp":  "2026-08-17T11:57:01.37810391Z",
+        "service_name":  "atlas-order-service",
+        "trace_id":  "e69cfa55fa116e2def8bdfd2a4036d17",
+        "span_id":  "c569dd8099c96289",
+        "parent_span_id":  "7ae0d2cc6a166661",
+        "operation_name":  "http post /api/orders",
+        "status":  "UNSET",
+        "duration_ms":  265,
+        "attributes":  {
+                           "correlation_id":  "ATLAS-M22-TRACE-PROOF",
+                           "exception":  "none",
+                           "http.url":  "/api/orders",
+                           "method":  "POST",
+                           "outcome":  "SUCCESS",
+                           "status":  "201",
+                           "uri":  "/api/orders"
+                       }
+    },
+    {
+        "event_id":  "0fe2614a-8914-4524-bbbf-7a25488a76e7",
+        "event_type":  "TRACE_SPAN",
+        "timestamp":  "2026-08-17T11:57:01.37052647Z",
+        "service_name":  "atlas-gateway",
+        "trace_id":  "e69cfa55fa116e2def8bdfd2a4036d17",
+        "span_id":  "7ae0d2cc6a166661",
+        "parent_span_id":  "bd02f61b3c1aac64",
+        "operation_name":  "http post",
+        "status":  "UNSET",
+        "duration_ms":  276,
+        "attributes":  {
+                           "client.name":  "order-service",
+                           "exception":  "none",
+                           "http.url":  "http://order-service:8084/api/orders",
+                           "method":  "POST",
+                           "outcome":  "SUCCESS",
+                           "status":  "201",
+                           "uri":  "/api/orders"
+                       }
+    },
+    {
+        "event_id":  "3a7cc5db-1cc9-41b2-aa0b-45e395c94924",
+        "event_type":  "TRACE_SPAN",
+        "timestamp":  "2026-08-17T11:57:01.345311416Z",
+        "service_name":  "atlas-gateway",
+        "trace_id":  "e69cfa55fa116e2def8bdfd2a4036d17",
+        "span_id":  "bd02f61b3c1aac64",
+        "operation_name":  "http post /api/orders",
+        "status":  "UNSET",
+        "duration_ms":  304,
+        "attributes":  {
+                           "correlation_id":  "ATLAS-M22-TRACE-PROOF",
+                           "exception":  "none",
+                           "http.url":  "/api/orders",
+                           "method":  "POST",
+                           "outcome":  "SUCCESS",
+                           "status":  "201",
+                           "uri":  "/api/orders"
+                       }
+    }
+]
