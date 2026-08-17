@@ -1,0 +1,65 @@
+﻿[
+    {
+        "span_id":  "d0555f2896cd16c4",
+        "service_name":  "atlas-gateway",
+        "operation_name":  "http post /api/orders",
+        "start_time":  "2026-08-17T12:58:19.882715393Z",
+        "end_time":  "2026-08-17T12:58:20.147715393Z",
+        "duration_ms":  265,
+        "status":  "UNSET"
+    },
+    {
+        "span_id":  "f5eed80c8012615d",
+        "service_name":  "atlas-gateway",
+        "operation_name":  "http post",
+        "start_time":  "2026-08-17T12:58:19.902583671Z",
+        "end_time":  "2026-08-17T12:58:20.145583671Z",
+        "duration_ms":  243,
+        "status":  "UNSET"
+    },
+    {
+        "span_id":  "a08c873386c1d0fd",
+        "service_name":  "atlas-order-service",
+        "operation_name":  "http post /api/orders",
+        "start_time":  "2026-08-17T12:58:19.909558325Z",
+        "end_time":  "2026-08-17T12:58:20.141558325Z",
+        "duration_ms":  232,
+        "status":  "UNSET"
+    },
+    {
+        "span_id":  "653c9a40b12deb38",
+        "service_name":  "atlas-order-service",
+        "operation_name":  "http post",
+        "start_time":  "2026-08-17T12:58:19.987234966Z",
+        "end_time":  "2026-08-17T12:58:20.060234966Z",
+        "duration_ms":  73,
+        "status":  "UNSET"
+    },
+    {
+        "span_id":  "9b0a206381a4a539",
+        "service_name":  "atlas-inventory-service",
+        "operation_name":  "http post /api/inventory/{productId}/reserve",
+        "start_time":  "2026-08-17T12:58:19.995105803Z",
+        "end_time":  "2026-08-17T12:58:20.057105803Z",
+        "duration_ms":  62,
+        "status":  "UNSET"
+    },
+    {
+        "span_id":  "3b2a7aa9306a176d",
+        "service_name":  "atlas-order-service",
+        "operation_name":  "http post",
+        "start_time":  "2026-08-17T12:58:20.061898294Z",
+        "end_time":  "2026-08-17T12:58:20.139898294Z",
+        "duration_ms":  78,
+        "status":  "UNSET"
+    },
+    {
+        "span_id":  "4109fd0c2ac4367e",
+        "service_name":  "atlas-payment-service",
+        "operation_name":  "http post /api/payments",
+        "start_time":  "2026-08-17T12:58:20.066894149Z",
+        "end_time":  "2026-08-17T12:58:20.138894149Z",
+        "duration_ms":  72,
+        "status":  "UNSET"
+    }
+]

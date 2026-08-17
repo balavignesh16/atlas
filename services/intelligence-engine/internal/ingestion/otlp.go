@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/atlas/intelligence-engine/internal/buffer"
+	"github.com/atlas/intelligence-engine/internal/correlation"
 	"github.com/atlas/intelligence-engine/internal/normalization"
 	metricpb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -15,10 +16,11 @@ import (
 
 type OTLPHandler struct {
 	buffer *buffer.EventBuffer
+	correlationEngine *correlation.Engine
 }
 
-func NewOTLPHandler(b *buffer.EventBuffer) *OTLPHandler {
-	return &OTLPHandler{buffer: b}
+func NewOTLPHandler(b *buffer.EventBuffer, c *correlation.Engine) *OTLPHandler {
+	return &OTLPHandler{buffer: b, correlationEngine: c}
 }
 
 // HandleTraces processes POST /v1/traces
@@ -58,6 +60,7 @@ func (h *OTLPHandler) HandleTraces(w http.ResponseWriter, r *http.Request) {
 	events := normalization.NormalizeTraces(req.GetResourceSpans())
 	for _, e := range events {
 		h.buffer.Add(e)
+		h.correlationEngine.ProcessEvent(e)
 	}
 
 	w.WriteHeader(http.StatusOK)

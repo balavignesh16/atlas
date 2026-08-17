@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/atlas/intelligence-engine/internal/buffer"
+	"github.com/atlas/intelligence-engine/internal/correlation"
+	"github.com/atlas/intelligence-engine/internal/graph"
 	"github.com/atlas/intelligence-engine/internal/httpapi"
 	"github.com/atlas/intelligence-engine/internal/ingestion"
 )
@@ -50,8 +52,31 @@ func main() {
 
 	// Components
 	eventBuffer := buffer.NewEventBuffer(capacity)
-	otlpHandler := ingestion.NewOTLPHandler(eventBuffer)
+	
+	retentionStr := os.Getenv("ATLAS_CORRELATION_RETENTION_SECONDS")
+	retention := 300
+	if r, err := strconv.Atoi(retentionStr); err == nil && r > 0 {
+		retention = r
+	}
+
+	depGraph := graph.NewDependencyGraph(retention)
+	corrEngine := correlation.NewEngine(depGraph, retention)
+
+	otlpHandler := ingestion.NewOTLPHandler(eventBuffer, corrEngine)
 	apiHandler := httpapi.NewVerificationAPI(eventBuffer)
+	corrAPI := httpapi.NewCorrelationAPI(corrEngine)
+	graphAPI := httpapi.NewGraphAPI(depGraph)
+
+	// Background cleanup
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			now := time.Now()
+			corrEngine.CleanupExpired(now)
+			depGraph.CleanupExpired(now)
+		}
+	}()
 
 	// Router
 	mux := http.NewServeMux()
@@ -65,6 +90,25 @@ func main() {
 	mux.HandleFunc("/api/v1/events", apiHandler.HandleGetEvents)
 	mux.HandleFunc("/api/v1/events/metrics", apiHandler.HandleGetMetrics)
 	mux.HandleFunc("/api/v1/events/trace/", apiHandler.HandleGetEventsByTrace)
+
+	// Correlation APIs
+	mux.HandleFunc("/api/v1/correlations/traces/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/tree") {
+			corrAPI.HandleGetTraceTree(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/timeline") {
+			corrAPI.HandleGetTraceTimeline(w, r)
+			return
+		}
+		corrAPI.HandleGetTrace(w, r)
+	})
+
+	// Graph APIs
+	mux.HandleFunc("/api/v1/graph/services/", graphAPI.HandleGetServiceDependencies)
+	mux.HandleFunc("/api/v1/graph/edges", graphAPI.HandleGetEdges)
+	mux.HandleFunc("/api/v1/graph", graphAPI.HandleGetGraph)
+
 	mux.HandleFunc("/api/v1/events/", func(w http.ResponseWriter, r *http.Request) {
 		// Route disambiguation since /api/v1/events/ prefix matches both ID and Trace
 		if strings.HasPrefix(r.URL.Path, "/api/v1/events/trace/") {

@@ -1,0 +1,72 @@
+﻿{
+    "nodes":  [
+                  "atlas-order-service",
+                  "atlas-inventory-service",
+                  "atlas-payment-service",
+                  "atlas-gateway"
+              ],
+    "edges":  [
+                  {
+                      "source":  "atlas-order-service",
+                      "target":  "atlas-inventory-service",
+                      "call_count":  9,
+                      "first_observed":  "2026-08-17T12:58:21.720490277Z",
+                      "last_observed":  "2026-08-17T12:58:27.391571822Z",
+                      "average_duration_ms":  9,
+                      "error_count":  0,
+                      "status_counts":  {
+                                            "UNSET":  9
+                                        }
+                  },
+                  {
+                      "source":  "atlas-order-service",
+                      "target":  "atlas-payment-service",
+                      "call_count":  5,
+                      "first_observed":  "2026-08-17T12:58:21.720495893Z",
+                      "last_observed":  "2026-08-17T12:58:27.3915634Z",
+                      "average_duration_ms":  16,
+                      "error_count":  0,
+                      "status_counts":  {
+                                            "UNSET":  5
+                                        }
+                  },
+                  {
+                      "source":  "atlas-order-service",
+                      "target":  "atlas-order-service",
+                      "call_count":  16,
+                      "first_observed":  "2026-08-17T12:58:21.72049732Z",
+                      "last_observed":  "2026-08-17T12:58:27.391577236Z",
+                      "average_duration_ms":  558,
+                      "error_count":  2,
+                      "status_counts":  {
+                                            "ERROR":  2,
+                                            "UNSET":  14
+                                        }
+                  },
+                  {
+                      "source":  "atlas-gateway",
+                      "target":  "atlas-order-service",
+                      "call_count":  8,
+                      "first_observed":  "2026-08-17T12:58:22.073924099Z",
+                      "last_observed":  "2026-08-17T12:58:27.744363333Z",
+                      "average_duration_ms":  1131,
+                      "error_count":  0,
+                      "status_counts":  {
+                                            "UNSET":  8
+                                        }
+                  },
+                  {
+                      "source":  "atlas-gateway",
+                      "target":  "atlas-gateway",
+                      "call_count":  8,
+                      "first_observed":  "2026-08-17T12:58:22.073926469Z",
+                      "last_observed":  "2026-08-17T12:58:27.744364087Z",
+                      "average_duration_ms":  544,
+                      "error_count":  3,
+                      "status_counts":  {
+                                            "ERROR":  3,
+                                            "UNSET":  5
+                                        }
+                  }
+              ]
+}
