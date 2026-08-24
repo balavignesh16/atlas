@@ -22,6 +22,27 @@ func NewAnalyzer(graphEngine *graph.DependencyGraph, corrEngine *correlation.Eng
 }
 
 // CheckTemporalPrecedence returns true if failure in candidate started BEFORE failure in target.
+//
+// M2.7.2 investigated switching this comparison from StartTime to EndTime
+// (the deepest failing span in a nested chain completes first, since it
+// fails immediately with nothing further to wait on) to let this dormant
+// mechanism actually activate. That change worked as designed -- verified
+// with real trace data -- but was reverted after live testing surfaced a
+// worse emergent effect: a middle-tier caller (e.g. order-service) already
+// carries its own DEPENDENCY_FAILURE evidence from rca.Engine's existing,
+// unmodified scoring (its own error rate + a failing outgoing dependency),
+// and stacking a newly-active precedence bonus on top of that let it
+// confidently (HIGH, score 80) outrank the true root cause (payment, which
+// as a pure sink can never earn the dependency-failure bonus) -- turning
+// M2.7.1's honest AMBIGUOUS(order, gateway) into a confident WRONG answer.
+// That's a direct violation of "do not force a root cause" / "preserve
+// AMBIGUOUS when evidence is insufficient", and rca.Engine's scoring
+// (where the actual fix would need to live -- weighing precedence against
+// how many distinct evidence types a candidate already holds) is out of
+// bounds for this milestone. TraceID population and status classification
+// stay fixed regardless (real, safe, independently useful); this specific
+// mechanism stays dormant, StartTime-based, exactly as before, until a
+// future milestone can touch rca.Engine's scoring formula itself.
 func (a *Analyzer) CheckTemporalPrecedence(candidate string, target string, inc *incidentmodel.Incident) (bool, time.Time, time.Time) {
 	// Find earliest error timestamp for candidate vs target in the incident's traces
 	var candEarliest, targetEarliest time.Time

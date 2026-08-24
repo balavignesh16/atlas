@@ -209,11 +209,11 @@ func TestCorrelate_SingleIncidentGetsSelfReferentialMetadata(t *testing.T) {
 // frozen scoring/ambiguity logic needs zero changes to correctly evaluate a
 // cascade once the primary incident carries the merged evidence.
 
-func newRCAEngine(depGraph *graph.DependencyGraph) (*rca.Engine, *evidence.Store) {
+func newRCAEngine(depGraph *graph.DependencyGraph) (*rca.Engine, *evidence.Store, *correlation.Engine) {
 	corrEngine := correlation.NewEngine(depGraph, 300)
 	propAnalyzer := propagation.NewAnalyzer(depGraph, corrEngine)
 	evStore := evidence.NewStore()
-	return rca.NewEngine(evStore, propAnalyzer, depGraph), evStore
+	return rca.NewEngine(evStore, propAnalyzer, depGraph), evStore, corrEngine
 }
 
 func addErrorRateEvidence(evStore *evidence.Store, inc *incidentmodel.Incident, service string) {
@@ -245,7 +245,7 @@ func TestCorrelate_RCASeesFullCascadeAfterCorrelation(t *testing.T) {
 	g.AddDependency("atlas-gateway", "atlas-order-service", 10, true, "5xx")
 	g.AddDependency("atlas-order-service", "atlas-payment-service", 10, true, "5xx")
 
-	rcaEngine, evStore := newRCAEngine(g)
+	rcaEngine, evStore, _ := newRCAEngine(g)
 
 	base := time.Now()
 	gateway := newIncident("atlas-gateway", base.Add(2*time.Second))
@@ -288,7 +288,7 @@ func TestCorrelate_ParallelFailureIntegration_RCAReturnsAmbiguous(t *testing.T) 
 	g.AddDependency("atlas-order-service", "atlas-payment-service", 10, true, "5xx")
 	g.AddDependency("atlas-order-service", "atlas-inventory-service", 10, true, "5xx")
 
-	rcaEngine, evStore := newRCAEngine(g)
+	rcaEngine, evStore, _ := newRCAEngine(g)
 
 	base := time.Now()
 	order := newIncident("atlas-order-service", base.Add(1*time.Second))
