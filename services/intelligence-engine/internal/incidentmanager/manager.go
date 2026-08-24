@@ -11,6 +11,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// MaxTraceIDsPerIncident bounds how many distinct trace IDs an incident
+// accumulates. TraceIDs are additional RCA evidence only (see
+// propagation.CheckTemporalPrecedence) -- a handful of real samples is
+// enough for that check to work, and capping prevents unbounded growth on a
+// long-lived or high-volume incident, consistent with this codebase's
+// existing bounded-buffer/retention conventions elsewhere.
+const MaxTraceIDsPerIncident = 10
+
 type Config struct {
 	RecoverySeconds  time.Duration
 	RetentionSeconds time.Duration
@@ -36,6 +44,25 @@ func NewManager(cfg Config, evStore *evidence.Store) *Manager {
 		incidents: make(map[string]*incidentmodel.Incident),
 		evStore:   evStore,
 	}
+}
+
+// appendTraceID adds traceID to traceIDs if it isn't already present,
+// evicting the oldest entry first if the list is at MaxTraceIDsPerIncident.
+// Callers already hold Manager.mu, so this needs no synchronization of its
+// own -- see ProcessSignal, the only caller.
+func appendTraceID(traceIDs []string, traceID string) []string {
+	if traceID == "" {
+		return traceIDs
+	}
+	for _, tid := range traceIDs {
+		if tid == traceID {
+			return traceIDs
+		}
+	}
+	if len(traceIDs) >= MaxTraceIDsPerIncident {
+		traceIDs = traceIDs[1:]
+	}
+	return append(traceIDs, traceID)
 }
 
 func getFingerprint(sig incidentsignal.Signal) string {
@@ -72,19 +99,7 @@ func (m *Manager) ProcessSignal(sig incidentsignal.Signal) {
 
 	if existing != nil {
 		existing.LastUpdatedAt = sig.Timestamp
-		// Add traceID if new
-		if sig.TraceID != "" {
-			found := false
-			for _, tid := range existing.TraceIDs {
-				if tid == sig.TraceID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				existing.TraceIDs = append(existing.TraceIDs, sig.TraceID)
-			}
-		}
+		existing.TraceIDs = appendTraceID(existing.TraceIDs, sig.TraceID)
 		// Add evidence if new
 		existing.EvidenceIDs = append(existing.EvidenceIDs, sig.Evidence.EvidenceID)
 		
@@ -114,9 +129,7 @@ func (m *Manager) ProcessSignal(sig incidentsignal.Signal) {
 			EvidenceIDs:     []string{sig.Evidence.EvidenceID},
 			DetectionReason: sig.Evidence.Description,
 		}
-		if sig.TraceID != "" {
-			inc.TraceIDs = append(inc.TraceIDs, sig.TraceID)
-		}
+		inc.TraceIDs = appendTraceID(inc.TraceIDs, sig.TraceID)
 		m.incidents[incID] = inc
 	}
 }

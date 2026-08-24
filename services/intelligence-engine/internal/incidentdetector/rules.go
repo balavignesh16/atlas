@@ -19,6 +19,12 @@ func (d *Detector) evaluateWindowRules(key string, w *window.Window, now time.Ti
 	service := parts[0]
 	operation := parts[1]
 
+	// Best-effort additional RCA evidence, not a detection input: a missing
+	// traceID (empty string) leaves Signal.TraceID/Evidence.TraceID empty,
+	// exactly as before this change -- detection and confidence are
+	// computed identically either way (see window.RecentTraceID's contract).
+	traceID := w.RecentTraceID()
+
 	errorRate := w.ErrorRate()
 	if errorRate > d.cfg.ErrorRateThreshold {
 		sig := incidentsignal.Signal{
@@ -30,12 +36,14 @@ func (d *Detector) evaluateWindowRules(key string, w *window.Window, now time.Ti
 			Value:     errorRate,
 			Threshold: d.cfg.ErrorRateThreshold,
 			Direction: "GREATER_THAN",
+			TraceID:   traceID,
 			Evidence: evidence.Evidence{
 				EvidenceID:  uuid.New().String(),
 				Type:        evidence.EvidenceTypeErrorRate,
 				Timestamp:   now,
 				Service:     service,
 				Operation:   operation,
+				TraceID:     traceID,
 				Description: fmt.Sprintf("Error rate %.2f%% exceeded threshold %.2f%%", errorRate*100, d.cfg.ErrorRateThreshold*100),
 				Value:       errorRate,
 				Expected:    d.cfg.ErrorRateThreshold,
@@ -57,12 +65,14 @@ func (d *Detector) evaluateWindowRules(key string, w *window.Window, now time.Ti
 			Value:     avgLatency,
 			Threshold: d.cfg.LatencyThresholdMs,
 			Direction: "GREATER_THAN",
+			TraceID:   traceID,
 			Evidence: evidence.Evidence{
 				EvidenceID:  uuid.New().String(),
 				Type:        evidence.EvidenceTypeLatency,
 				Timestamp:   now,
 				Service:     service,
 				Operation:   operation,
+				TraceID:     traceID,
 				Description: fmt.Sprintf("Average latency %.2fms exceeded threshold %.2fms", avgLatency, d.cfg.LatencyThresholdMs),
 				Value:       avgLatency,
 				Expected:    d.cfg.LatencyThresholdMs,

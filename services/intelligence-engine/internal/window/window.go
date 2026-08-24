@@ -10,6 +10,7 @@ type Observation struct {
 	Timestamp  time.Time
 	DurationMs float64
 	IsError    bool
+	TraceID    string
 }
 
 type Window struct {
@@ -23,14 +24,34 @@ func NewWindow() *Window {
 	}
 }
 
-func (w *Window) Add(durationMs float64, isError bool, timestamp time.Time) {
+// Add records an observation. traceID is optional (may be empty) -- it is
+// carried purely as additional RCA evidence (see RecentTraceID); a missing
+// traceID never affects detection, error rate, or latency calculations.
+func (w *Window) Add(durationMs float64, isError bool, timestamp time.Time, traceID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.observations = append(w.observations, Observation{
 		Timestamp:  timestamp,
 		DurationMs: durationMs,
 		IsError:    isError,
+		TraceID:    traceID,
 	})
+}
+
+// RecentTraceID returns the trace ID of the most recent observation that
+// has one, or "" if the window is empty or none of its observations carry a
+// trace ID. This is best-effort additional evidence for RCA's temporal
+// precedence check -- callers must treat an empty result as "no trace
+// evidence available" and continue exactly as before, never as an error.
+func (w *Window) RecentTraceID() string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	for i := len(w.observations) - 1; i >= 0; i-- {
+		if w.observations[i].TraceID != "" {
+			return w.observations[i].TraceID
+		}
+	}
+	return ""
 }
 
 func (w *Window) CleanupExpired(threshold time.Time) {

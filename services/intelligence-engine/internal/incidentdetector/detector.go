@@ -78,25 +78,12 @@ func (d *Detector) ProcessEvent(e event.ATLASEvent) {
 		return
 	}
 	
-	isError := e.Status == "ERROR" || e.Status == "5xx"
-	// A server-side span's own Status field stays "UNSET" even for a clean
-	// 5xx response (Spring's exception handlers convert it to a normal
-	// response before span-status instrumentation runs); the real code only
-	// shows up as a string attribute. Different instrumentation stacks tag
-	// it under different keys -- "status" is what this project's actual
-	// Micrometer/Spring telemetry populates (verified against live span
-	// output); the other two are kept for forward/other-stack compatibility.
-	for _, key := range []string{"http.response.status_code", "http.status_code", "status"} {
-		if statusCode, ok := e.Attributes[key]; ok && len(statusCode) > 0 && statusCode[0] == '5' {
-			isError = true
-			break
-		}
-	}
+	isError := event.IsErrorStatus(e.Status, e.Attributes)
 
 	slog.Info("IncidentDetector ProcessEvent", "service", e.ServiceName, "operation", e.OperationName, "status", e.Status, "isError", isError)
-	
+
 	w := d.getWindow(e.ServiceName, e.OperationName)
-	w.Add(float64(e.DurationMs), isError, e.Timestamp)
+	w.Add(float64(e.DurationMs), isError, e.Timestamp, e.TraceID)
 }
 
 func (d *Detector) EvaluateAll() {
