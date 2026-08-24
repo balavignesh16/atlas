@@ -13,7 +13,7 @@ import (
 )
 
 type Adapter struct {
-	cli *client.Client
+	cli ContainerRestarter
 }
 
 func NewAdapter() (*Adapter, error) {
