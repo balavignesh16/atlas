@@ -1,6 +1,6 @@
 # ATLAS Roadmap & Status Checklist
 
-Source of truth for "what's actually done" vs "what's planned." Generated from a direct audit of the repository (git history, code, `go build`/`go test`, and a live `docker compose` E2E run) on 2026-08-24 — not from prior verification reports alone, several of which overstated coverage or described scenarios that didn't reproduce (see §2).
+Source of truth for "what's actually done" vs "what's planned." Generated from a direct audit of the repository (git history, code, `go build`/`go test`, and multiple live `docker compose` E2E runs) on 2026-08-24 — not from prior verification reports alone, several of which overstated coverage or described scenarios that didn't reproduce (see §2). Updated same day after implementing and live-verifying M2.7.1 (see `docs/m271_verification_report.md` for full command output).
 
 Numbering follows the milestone scheme actually used in the repo (`M0`, `M1.x`, `M2.x`) rather than the alternate 18-module ChatGPT plan, per the reconciliation in §5.
 
@@ -33,7 +33,9 @@ Numbering follows the milestone scheme actually used in the repo (`M0`, `M1.x`, 
 - [x] Evidence-based RCA, blast radius, ambiguous-RCA handling
 - [x] ~~Regression~~ **Fixed & verified live**: the detector's `EventType != "SPAN"` check never matched real events (`"TRACE_SPAN"`), so detection was inert in the live pipeline since this milestone's original commit. Fixed, covered by a new regression test (`internal/incidentdetector/detector_test.go`), and confirmed working in a real `docker compose` run on 2026-08-24 — real incidents were created from real traffic for the first time. Still **uncommitted**.
 - [x] RCA confidence threshold reverted `< 30` → `< 40` (the original, frozen value) with a new regression test (`internal/rca/engine_test.go`) locking in the boundary. Confirmed correct live: two incidents scored exactly 30 during the E2E run and correctly stayed LOW confidence under `< 40` (they would have wrongly been promoted to MEDIUM under the uncommitted `< 30`).
-- [ ] ⚠️ **New gap found during the live E2E run**: incidents are currently scoped per-service (`affectedServices` contains only the one degrading service), not linked into a cross-service cascade. When a failure at one service (e.g. inventory) cascades upward, ATLAS opens **separate, independent incidents** for each affected service (e.g. `atlas-gateway degradation`, `atlas-order-service degradation`) and RCA scores each in isolation — so a downstream victim can be reported as its own "root cause" rather than tracing back to the true originator. This contradicts the architecture doc's own worked example (§33, §56) where a single Payment-rooted incident is expected. Pre-existing behavior, not introduced by this session's changes; needs a dedicated RCA/incident-manager design pass to correlate related incidents across the dependency graph before scoring root cause.
+- [x] **Fixed & verified live (M2.7.1)**: the detector's status-code fallback checked `http.status_code`/`http.response.status_code` attributes this project's real Micrometer/Spring telemetry never populates (the actual key is `status`). Before this fix, `atlas-payment-service` — a pure sink with no outbound calls of its own — could never register an error at all (its own span's `Status` field also never becomes `ERROR`/`5xx` under this instrumentation). Fixed with regression tests (`TestProcessEvent_MicrometerStatusAttributeMarksError` etc.), confirmed live: payment-service now correctly generates its own incidents from real traffic.
+- [x] **Cross-service incident correlation added (M2.7.1)**, resolving the gap noted below in the previous version of this doc: `internal/incidentmanager/correlator.go` groups incidents connected through the M2.3 dependency graph within a time window, and selects a causally-correct primary via a caller/callee sink rule (a service can only be primary if no other group member is something it calls). Metadata-only (`correlationGroupId`, `primaryIncidentId`, `relatedIncidentIds`) — `Incident.Status` and `rca.Engine` itself are both untouched. Verified live: a real 3-service cascade (payment→order→gateway) correctly grouped into one `correlationGroupId` with **payment-service correctly selected as primary**, not one of its callers.
+- [ ] ⚠️ **New structural finding (M2.7.1, not fixed — logged for a future RCA-scoring milestone)**: even with correlation correctly identifying the true root cause as primary, `rca.Engine`'s own scoring can still legitimately return AMBIGUOUS or LOW-confidence for it. A caller whose dependency fails earns both its own error-rate evidence (+25) *and* a dependency-error signal (+20) = 45; the sink that actually failed only ever earns its own error-rate evidence (+25), since it has nothing to depend on and can never earn that bonus (the trace-based temporal-precedence bonus, +30, is separately dormant — `Incident.TraceIDs` is never populated). Practical effect, confirmed live twice: a real multi-hop cascade structurally cannot reach non-ambiguous, execution-eligible RCA for the true root cause under the current scoring formula, independent of correlation. Correlation didn't cause this — it exposed it: before correlation existed, every incident had exactly one candidate (itself), so it was trivially "non-ambiguous" by default and this weakness was invisible. See `docs/m271_verification_report.md` for the full trace and exact score breakdown.
 
 ### M2.5 — AI-Assisted Incident Reasoning
 - [x] Provider interface (Fake/Gemini), bounded context builder
@@ -47,35 +49,41 @@ Numbering follows the milestone scheme actually used in the repo (`M0`, `M1.x`, 
 
 ---
 
-## 2. Implemented but NOT yet committed / verified — M2.7 Controlled Execution Engine
+## 2. M2.7 Controlled Execution Engine + M2.7.1 Correlation & Hardening
 
-Code is complete in the working tree and compiles clean (`go build ./...` passes, `go test ./...` passes). A live `docker compose` E2E run was performed on 2026-08-24 with `ATLAS_EXECUTION_ENABLED=true`. Not frozen yet — treat as **in review**, not done:
+Code is complete in the working tree and compiles clean (`go build`/`go vet`/`go test`/`go test -race` all pass). Multiple live `docker compose` E2E runs were performed on 2026-08-24. **Still uncommitted** — awaiting review (see `docs/m271_verification_report.md` for full command output and exact live results).
 
 - [x] Execution guard (enabled flag, approval status, fingerprint match, action/service allowlist, evidence check)
-- [x] Idempotency by `(planId, actionId)`
+- [x] Idempotency by `(planId, actionId)` — verified against a real Docker restart, not just the fake executor
 - [x] Typed Docker SDK adapter (`RestartService`, `Observe`, `Investigate`) — no shell/CLI execution
 - [x] Async post-execution verification against M2.4 incident state
 - [x] Execution HTTP API (`execute`, `GET /executions/{id}`, `GET /incidents/{id}/executions`)
 - [x] Unit tests for guard/engine (`go test ./internal/execution/...` passes)
 - [x] Docker build verified — `docker compose up -d --build` succeeds, all 8 containers reach healthy
-- [ ] **Live E2E scenario does NOT reproduce the claims in `docs/m27_verification_report.md`.** Ran `test-m27-docker.ps1` for real: it never got past plan generation ("Remediation plan was not generated in time"). Root cause, confirmed from container logs and the live incidents API:
-  - The script's "PAYFAIL" burst (`quantity: 3`) mostly triggers `409 CONFLICT "Insufficient inventory"` at order-service (stock exhausted by the earlier "normal" burst), not a payment failure. Only one request actually hit payment, as a client-side timeout artifact.
-  - Two incidents *were* created (`atlas-gateway degradation`, `atlas-order-service degradation` — confirming the M2.4 detector fix works end-to-end) but both auto-resolved (~80s, per the 60s window + 30s recovery buffer) before the script's polling loop checked `/incidents/open`.
-  - **No incident ever targeted `atlas-payment-service`**, so even with better timing this scenario could never have produced the "restart payment-service" plan the verification report walks through. `docs/m27_verification_report.md`'s specific narrative is not currently reproducible with this script against this codebase — treat that report as aspirational/unverified, not evidence.
-  - This is a test-script defect (unreliable failure injection), not something this session's code changes touched. Deferred — see the new item below.
-- [ ] `internal/infrastructure/docker` has **zero unit tests** — the actual restart logic is only exercised by the (currently unreliable) E2E script
-- [ ] `-race` not verifiable on this dev machine (broken local cgo/gcc toolchain) — confirm CI still runs it
+- [x] `internal/infrastructure/docker` unit tests added (`adapter_test.go`, 4 tests via a `ContainerRestarter` interface seam, no live daemon needed)
+- [x] **Real Docker restart proven against live infrastructure**: `TestDockerAdapter_RealRestartAgainstLiveContainer` (opt-in, `ATLAS_DOCKER_INTEGRATION_TEST=true`) runs the real, unmodified `execution.Engine` + real Docker adapter against a live `atlas-payment-service-1` container. `docker inspect` independently confirmed the container's `StartedAt` matched the test's execution timestamp — a genuine restart, not a claim.
+- [x] `-race` verified clean (run inside a Linux container; this dev machine's native cgo/gcc toolchain is broken)
+- [x] Cross-service correlation added and verified live (see §1)
+- [x] Correlation succeeded, and primary selection succeeded, against real live traffic (`test-m27-docker.ps1` Scenario A: a real 3-service cascade correctly grouped into one `correlationGroupId` with payment-service — the true root — correctly selected as primary, never one of its callers).
+- [x] Execution infrastructure verified independently of the above, against real infrastructure (guard validation, real Docker restart, idempotency — see `docs/m271_verification_report.md`).
+- [ ] ⚠️ **Full cascade plan → execute flow is blocked by existing RCA confidence limitations, not by anything built in M2.7.1.** Neither live scenario in `test-m27-docker.ps1` reaches plan execution:
+  - **Scenario A** (real cascade via the gateway): correlation correctly identifies payment-service as primary; `rca.Engine`'s own (unmodified) scoring lands on AMBIGUOUS; M2.6 correctly refuses to plan a HIGH-risk action.
+  - **Scenario B** (isolated payment-only failure, bypassing gateway/order-service): reaches non-ambiguous RCA but still hits a second M2.6 gate (LOW confidence, same root mechanism) — plan generation blocked.
+  - The original `docs/m27_verification_report.md`'s "restart payment-service" narrative is **not** reproduced end to end by either scenario. What *is* proven, decoupled from the RCA gate above by deliberate design, is the execution mechanics themselves (guard, idempotency, real Docker restart) via a Go-level integration test that constructs an already-approved plan directly rather than routing through the HTTP planner/confidence gate. See "Known limitation carried into future milestone" in `docs/m271_verification_report.md` — the recommended fix (M2.7.2) is populating `Incident.TraceIDs` to activate the RCA engine's existing, currently-dormant temporal-precedence bonus.
 - [ ] Nothing is committed to git yet
 
-### Defects fixed this session (uncommitted)
-1. ~~`docker-compose.yml` defaulted `ATLAS_EXECUTION_ENABLED=true`~~ — now `${ATLAS_EXECUTION_ENABLED:-false}`, safe by default, opt-in via env var (matches the file's existing `${VAR:-default}` convention). Docker-socket mount is still present but inert unless explicitly enabled.
-2. ~~RCA confidence threshold silently changed `< 40` → `< 30`~~ — reverted to the original frozen value, now covered by a regression test. Confirmed correct against live data (see §1).
-3. ~~Detector `EventType` bug had no regression test~~ — added (`internal/incidentdetector/detector_test.go`), verified against live traffic.
+### Defects fixed across this session (uncommitted)
+1. ~~`docker-compose.yml` defaulted `ATLAS_EXECUTION_ENABLED=true`~~ — now `${ATLAS_EXECUTION_ENABLED:-false}`, safe by default, opt-in via env var. Docker-socket mount still present but inert unless explicitly enabled.
+2. ~~RCA confidence threshold silently changed `< 40` → `< 30`~~ — reverted, covered by a regression test, confirmed correct against live data.
+3. ~~Detector `EventType` bug had no regression test~~ — added, verified against live traffic.
+4. ~~`test-m27-docker.ps1`'s failure-injection didn't reliably target payment-service~~ — root-caused twice (inventory contention, then wrong sandbox trigger) and fixed; script now correctly reaches payment-service reliably in both scenarios.
+5. ~~Detector's status-code attribute-key mismatch~~ (§1) — fixed with regression tests, confirmed live.
+6. ~~`internal/infrastructure/docker` had zero unit tests~~ — added (mocked + live-integration).
 
-### Known defects still open (deferred, not fixed this session — logged per explicit decision)
-4. **`test-m27-docker.ps1`'s failure-injection doesn't reliably target payment-service** — see the E2E result above. The script needs a scenario that reliably starves *payment* specifically (e.g. a dedicated `/api/payments` failure trigger) rather than relying on inventory exhaustion as a side effect of request volume.
-5. **RCA doesn't correlate cascading incidents across services** — see §1's new M2.4 gap. Needed before the "M2.7 restarts the true root cause" story can work end-to-end.
-6. Verbose `slog.Info` debug logging left in the hot path of `incidentdetector.ProcessEvent` and `EvaluateAll` — should drop to `Debug` or be removed. (Not fixed — out of the approved scope for this session.)
+### Known defects still open (deferred, logged per explicit decision — not fixed this session)
+7. **Structural RCA scoring gap** — see §1. Scoped as a dedicated future milestone (**M2.7.2**): populate `Incident.TraceIDs` to activate the RCA engine's existing, currently-dormant temporal-precedence bonus (the most promising lead, since that mechanism already exists and was designed for exactly this) rather than rebalancing the scoring formula's point values by trial and error.
+8. Verbose `slog.Info` debug logging left in the hot path of `incidentdetector.ProcessEvent` and `EvaluateAll` — should drop to `Debug` or be removed. (Not fixed — out of approved scope.)
+9. Execution-endpoint authentication/RBAC — explicitly deferred to a future security milestone per instruction.
 
 ---
 
@@ -95,7 +103,7 @@ Pure additions on top of the existing architecture — no rewrite required:
 
 - **`services/control-plane` (Spring Boot) and `agents/atlas-agent` (Go)** are unbuilt M0-era stubs, not part of the actual architecture (study guide never mentions them), yet still built in CI and run in `docker-compose.yml`. Decide: retire them, or repurpose them for a real future milestone (see §5).
 - CI (`ci.yml`) requests Go 1.26 / Java 25; local dev machine has Go 1.25.0 — confirm this isn't silently masking a version-specific issue.
-- Test coverage gap: `incidentmanager`, `ingestion`, `normalization`, `httpapi`, `infrastructure/docker`, and several model packages still have no unit tests at all (`incidentdetector` and `rca` gained regression tests this session).
+- Test coverage gap: `ingestion`, `normalization`, `httpapi`, and several model packages still have no unit tests at all (`incidentdetector`, `rca`, `incidentmanager`, and `infrastructure/docker` all gained tests this session).
 
 ## 5. Reconciling the new 18-module roadmap
 
