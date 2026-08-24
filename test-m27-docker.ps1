@@ -124,10 +124,18 @@ try {
 } catch {
     # remediation/plan returns a plain-text body via http.Error (not JSON) on
     # failure; PowerShell surfaces it directly as $_.ErrorDetails.Message.
+    # Both AMBIGUOUS and LOW-confidence blocks are expected, safe outcomes --
+    # not just AMBIGUOUS. Real traffic timing varies run to run: sometimes
+    # gateway/order-service also cross their own thresholds and RCA lands on
+    # a genuine tie (AMBIGUOUS); sometimes only payment-service does, and
+    # RCA correctly names it as sole candidate but at LOW confidence (a
+    # single evidence type, per docs/m271_verification_report.md). Either
+    # way M2.6 correctly refusing a HIGH-risk action under weak evidence is
+    # the safety property under test here, not which specific gate fired.
     $body = $_.ErrorDetails.Message
-    if ($body -like "*AMBIGUOUS*") {
+    if ($body -like "*AMBIGUOUS*" -or $body -like "*LOW confidence*") {
         $scenarioAPlanBlocked = $true
-        Write-Host "EXPECTED SAFETY OUTCOME: M2.6 correctly refused to plan a HIGH-risk action against an AMBIGUOUS-RCA incident ($body)."
+        Write-Host "EXPECTED SAFETY OUTCOME: M2.6 correctly refused to plan a HIGH-risk action against insufficient-confidence RCA ($body)."
     } else {
         Write-Error "Plan generation failed for an unexpected reason: $body"
     }
@@ -138,23 +146,29 @@ if (-not $scenarioAPlanBlocked) {
     if ($plan.actions[0].targetService -ne "atlas-payment-service") {
         Write-Error "Expected the plan's action to target atlas-payment-service, got $($plan.actions[0].targetService)"
     }
-    Write-Host "RCA was non-ambiguous this run -- plan targets atlas-payment-service as expected."
+    Write-Host "RCA was non-ambiguous and sufficiently confident this run -- plan targets atlas-payment-service as expected."
 }
 
 Write-Host ""
 Write-Host "=== SCENARIO A: PASS (detection + correlation verified against live traffic) ==="
 
 Write-Host ""
-Write-Host "Waiting for Scenario A's incidents to resolve before starting Scenario B..."
-Write-Host "(otherwise Scenario B's traffic could fingerprint-match into Scenario A's still-open, already-correlated payment incident instead of forming a fresh, genuinely isolated one)"
+Write-Host "Waiting for ALL of Scenario A's incidents (gateway, order-service, payment-service) to resolve before starting Scenario B..."
+Write-Host "(a partial wait -- e.g. payment-service only -- lets gateway/order-service linger open and re-correlate with Scenario B's fresh payment incident on the next evaluation cycle, contaminating the 'isolated' check below)"
 $retries = 0
 $clear = $false
-while (-not $clear -and $retries -lt 24) {
+# Now waiting for ALL cascade incidents (up to ~7 distinct fingerprints
+# across gateway/order-service/payment-service and their operation-key
+# variants), each resolving independently 30s after its OWN last update --
+# empirically observed to take longer than the original 120s budget when
+# several are still trickling closed near the deadline, so this allows up
+# to 200s.
+while (-not $clear -and $retries -lt 40) {
     Start-Sleep -Seconds 5
     try {
         $incidents = Invoke-RestMethod -Uri "http://localhost:8081/api/v1/incidents/open" -UseBasicParsing
-        $stillOpenPayment = $incidents | Where-Object { $_.rootService -eq "atlas-payment-service" }
-        if (-not $stillOpenPayment) {
+        $stillOpenFromCascade = $incidents | Where-Object { $_.rootService -in @("atlas-gateway", "atlas-order-service", "atlas-payment-service") }
+        if (-not $stillOpenFromCascade) {
             $clear = $true
         }
     } catch {
@@ -163,7 +177,7 @@ while (-not $clear -and $retries -lt 24) {
     $retries++
 }
 if (-not $clear) {
-    Write-Error "Scenario A's payment-service incident never resolved; refusing to start Scenario B against contaminated state."
+    Write-Error "Scenario A's incidents never fully resolved; refusing to start Scenario B against contaminated state."
 }
 Write-Host "Clear. Starting Scenario B."
 
