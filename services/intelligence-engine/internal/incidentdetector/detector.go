@@ -2,6 +2,7 @@ package incidentdetector
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -73,11 +74,24 @@ func (d *Detector) getWindow(service, operation string) *window.Window {
 }
 
 func (d *Detector) ProcessEvent(e event.ATLASEvent) {
-	if e.EventType != "SPAN" {
+	if e.EventType != event.EventTypeTraceSpan {
 		return
 	}
-	w := d.getWindow(e.ServiceName, e.OperationName)
+	
 	isError := e.Status == "ERROR" || e.Status == "5xx"
+	if statusCode, ok := e.Attributes["http.response.status_code"]; ok {
+		if len(statusCode) > 0 && statusCode[0] == '5' {
+			isError = true
+		}
+	} else if statusCode, ok := e.Attributes["http.status_code"]; ok {
+		if len(statusCode) > 0 && statusCode[0] == '5' {
+			isError = true
+		}
+	}
+
+	slog.Info("IncidentDetector ProcessEvent", "service", e.ServiceName, "operation", e.OperationName, "status", e.Status, "isError", isError)
+	
+	w := d.getWindow(e.ServiceName, e.OperationName)
 	w.Add(float64(e.DurationMs), isError, e.Timestamp)
 }
 
@@ -98,6 +112,12 @@ func (d *Detector) EvaluateAll() {
 		w.CleanupExpired(thresholdTime)
 		
 		count := w.Count()
+		errRate := w.ErrorRate()
+		avgLat := w.AverageLatency()
+		
+		// ALWAYS log the window state for debugging
+		slog.Info("IncidentDetector Window State", "key", key, "count", count, "errorRate", errRate, "avgLatency", avgLat)
+
 		if count < d.cfg.MinObservations {
 			continue // Avoid single-request false positives
 		}

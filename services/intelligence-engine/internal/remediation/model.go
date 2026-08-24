@@ -40,10 +40,11 @@ const (
 )
 
 type ApprovalMetadata struct {
-	ApprovedAt      *time.Time `json:"approvedAt,omitempty"`
-	RejectedAt      *time.Time `json:"rejectedAt,omitempty"`
-	ApprovalReason  string     `json:"approvalReason,omitempty"`
-	RejectionReason string     `json:"rejectionReason,omitempty"`
+	ApprovedAt          *time.Time `json:"approvedAt,omitempty"`
+	RejectedAt          *time.Time `json:"rejectedAt,omitempty"`
+	ApprovalReason      string     `json:"approvalReason,omitempty"`
+	RejectionReason     string     `json:"rejectionReason,omitempty"`
+	ApprovedFingerprint string     `json:"approvedFingerprint,omitempty"`
 }
 
 type RemediationPlan struct {

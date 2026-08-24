@@ -106,8 +106,9 @@ func (p *Planner) ApprovePlan(planID string, reason string) (*RemediationPlan, e
 	now := time.Now()
 	plan.Status = StatusApproved
 	plan.Approval = ApprovalMetadata{
-		ApprovedAt:     &now,
-		ApprovalReason: reason,
+		ApprovedAt:          &now,
+		ApprovalReason:      reason,
+		ApprovedFingerprint: plan.Fingerprint,
 	}
 
 	// Safe copy

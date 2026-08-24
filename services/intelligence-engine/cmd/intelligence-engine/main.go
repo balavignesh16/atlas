@@ -29,6 +29,9 @@ import (
 	"github.com/atlas/intelligence-engine/internal/rca"
 	"github.com/atlas/intelligence-engine/internal/remediation"
 	rmprovider "github.com/atlas/intelligence-engine/internal/remediation/provider"
+	"github.com/atlas/intelligence-engine/internal/execution"
+	execprovider "github.com/atlas/intelligence-engine/internal/execution/provider"
+	"github.com/atlas/intelligence-engine/internal/infrastructure/docker"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +128,33 @@ func main() {
 	incidentAPI := httpapi.NewIncidentAPI(incManager, evStore, rcaEngine, corrEngine, aiEngine, depGraph)
 	remediationAPI := httpapi.NewRemediationAPI(incManager, evStore, aiEngine, rmPlanner)
 
+	// M2.7 Initialization
+	execEnabled := os.Getenv("ATLAS_EXECUTION_ENABLED") == "true"
+	execTimeoutStr := os.Getenv("ATLAS_EXECUTION_TIMEOUT_SECONDS")
+	execTimeout := 30
+	if t, err := strconv.Atoi(execTimeoutStr); err == nil && t > 0 {
+		execTimeout = t
+	}
+
+	execGuard := execution.NewGuard(execEnabled)
+	execStore := execution.NewStore(retention)
+	execVerifier := execution.NewVerifier(incManager)
+
+	var execProvider execution.ExecutorProvider
+	if execEnabled && os.Getenv("ATLAS_EXECUTION_PROVIDER") == "docker" {
+		dockerAdapter, err := docker.NewAdapter()
+		if err != nil {
+			slog.Error("Failed to initialize Docker execution adapter", "error", err)
+			os.Exit(1)
+		}
+		execProvider = dockerAdapter
+	} else {
+		execProvider = execprovider.NewFakeExecutor()
+	}
+
+	execEngine := execution.NewEngine(execGuard, execProvider, execVerifier, execStore, execTimeout)
+	executionAPI := httpapi.NewExecutionAPI(execEngine, rmPlanner)
+
 	go func() {
 		for sig := range signalsChan {
 			incManager.ProcessSignal(sig)
@@ -156,6 +186,7 @@ func main() {
 			evStore.CleanupExpired(incidentmanager.DefaultConfig().RetentionSeconds)
 			aiEngine.CleanupExpired(now)
 			rmPlanner.CleanupExpired(now)
+			execEngine.CleanupExpired(now)
 		}
 	}()
 
@@ -216,6 +247,14 @@ func main() {
 			}
 			return
 		}
+		if len(parts) >= 6 && parts[5] == "executions" {
+			if r.Method == http.MethodGet {
+				executionAPI.HandleGetExecutionsByIncident(w, r)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
 		incidentAPI.HandleGetIncident(w, r)
 	})
 	mux.HandleFunc("/api/v1/incidents", incidentAPI.HandleGetIncidents)
@@ -232,9 +271,22 @@ func main() {
 				remediationAPI.HandleReject(w, r)
 				return
 			}
+			if parts[5] == "execute" && r.Method == http.MethodPost {
+				executionAPI.HandleExecute(w, r)
+				return
+			}
 		}
 		if r.Method == http.MethodGet {
 			remediationAPI.HandleGetPlan(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	// Execution API (/api/v1/executions/...)
+	mux.HandleFunc("/api/v1/executions/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			executionAPI.HandleGetExecution(w, r)
 			return
 		}
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

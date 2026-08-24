@@ -24,6 +24,10 @@ services:
     environment:
       - APP_ENV=${APP_ENV:-development}
       - ATLAS_ENGINE_PORT=8081
+      - ATLAS_EXECUTION_ENABLED=${ATLAS_EXECUTION_ENABLED:-false}
+      - ATLAS_EXECUTION_PROVIDER=${ATLAS_EXECUTION_PROVIDER:-docker}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]

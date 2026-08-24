@@ -52,7 +52,7 @@ func (f *FakePlanner) GeneratePlan(ctx context.Context, input *remediation.Remed
 	act := action.RemediationAction{
 		ActionID:           uuid.New().String(),
 		Type:               actType,
-		TargetService:      "atlas-payment-service",
+		TargetService:      input.Incident.RootService,
 		Description:        "Restarting the service symbolically",
 		EvidenceIDs:        evidenceIDs,
 		ExpectedOutcome:    "Service becomes healthy",

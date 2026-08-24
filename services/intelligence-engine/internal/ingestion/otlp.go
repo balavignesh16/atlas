@@ -60,6 +60,7 @@ func (h *OTLPHandler) HandleTraces(w http.ResponseWriter, r *http.Request) {
 	}
 
 	events := normalization.NormalizeTraces(req.GetResourceSpans())
+	slog.Info("Processed trace payload", "events_count", len(events))
 	for _, e := range events {
 		h.buffer.Add(e)
 		h.correlationEngine.ProcessEvent(e)
