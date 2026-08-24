@@ -79,13 +79,17 @@ func (d *Detector) ProcessEvent(e event.ATLASEvent) {
 	}
 	
 	isError := e.Status == "ERROR" || e.Status == "5xx"
-	if statusCode, ok := e.Attributes["http.response.status_code"]; ok {
-		if len(statusCode) > 0 && statusCode[0] == '5' {
+	// A server-side span's own Status field stays "UNSET" even for a clean
+	// 5xx response (Spring's exception handlers convert it to a normal
+	// response before span-status instrumentation runs); the real code only
+	// shows up as a string attribute. Different instrumentation stacks tag
+	// it under different keys -- "status" is what this project's actual
+	// Micrometer/Spring telemetry populates (verified against live span
+	// output); the other two are kept for forward/other-stack compatibility.
+	for _, key := range []string{"http.response.status_code", "http.status_code", "status"} {
+		if statusCode, ok := e.Attributes[key]; ok && len(statusCode) > 0 && statusCode[0] == '5' {
 			isError = true
-		}
-	} else if statusCode, ok := e.Attributes["http.status_code"]; ok {
-		if len(statusCode) > 0 && statusCode[0] == '5' {
-			isError = true
+			break
 		}
 	}
 

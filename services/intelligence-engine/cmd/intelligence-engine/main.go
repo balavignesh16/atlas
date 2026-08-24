@@ -86,6 +86,14 @@ func main() {
 	blastAnalyzer := blast.NewAnalyzer(corrEngine)
 	rcaEngine := rca.NewEngine(evStore, propAnalyzer, depGraph)
 
+	// M2.7.1: cross-service incident correlation. Runs before RCA; rca.Engine itself is unmodified.
+	correlationWindowStr := os.Getenv("ATLAS_CORRELATION_WINDOW_SECONDS")
+	correlationWindow := 20
+	if w, err := strconv.Atoi(correlationWindowStr); err == nil && w > 0 {
+		correlationWindow = w
+	}
+	correlator := incidentmanager.NewCorrelator(correlationWindow)
+
 	// M2.5 Initialization
 	aiCfg := aireasoning.Config{
 		Enabled:         os.Getenv("ATLAS_AI_ENABLED") != "false",
@@ -171,11 +179,22 @@ func main() {
 			// Detectors and Managers
 			detector.EvaluateAll()
 			incManager.CleanupAndResolve()
-			
+
 			// Re-evaluate incidents
 			openIncs := incManager.GetOpenIncidents()
+
+			// Blast radius first (per-incident, may set AffectedServices from trace data).
 			for _, inc := range openIncs {
 				blastAnalyzer.Calculate(inc)
+			}
+
+			// M2.7.1: correlate cascading incidents across the dependency graph
+			// BEFORE RCA runs, so the (unmodified) RCA engine sees the full
+			// cascade on the group's primary incident instead of scoring each
+			// service in isolation. Metadata-only; never changes Status.
+			correlator.Correlate(openIncs, depGraph, now)
+
+			for _, inc := range openIncs {
 				rcaEngine.Analyze(inc)
 				incManager.UpdateIncident(inc)
 			}

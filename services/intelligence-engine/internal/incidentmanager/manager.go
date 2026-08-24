@@ -189,6 +189,7 @@ func cloneIncident(inc *incidentmodel.Incident) *incidentmodel.Incident {
 	cloned.AffectedEdges = append([]string(nil), inc.AffectedEdges...)
 	cloned.TraceIDs = append([]string(nil), inc.TraceIDs...)
 	cloned.EvidenceIDs = append([]string(nil), inc.EvidenceIDs...)
+	cloned.RelatedIncidentIDs = append([]string(nil), inc.RelatedIncidentIDs...)
 	if inc.RCA != nil {
 		r := *inc.RCA
 		cloned.RCA = &r

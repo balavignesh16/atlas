@@ -81,3 +81,53 @@ func TestProcessEvent_HttpStatusCodeAttributeMarksError(t *testing.T) {
 		t.Fatalf("expected a 5xx status_code attribute to be treated as an error, got error rate %f", got)
 	}
 }
+
+// Regression test (M2.7.1): a live docker-compose run showed that this
+// project's actual Micrometer/Spring instrumentation never sets the span's
+// own Status field to ERROR for a server-side span, even on a genuine 500
+// response -- it always stays "UNSET" -- and carries the real HTTP status
+// under the plain attribute key "status" (e.g. {"status": "500", "outcome":
+// "SERVER_ERROR"}), not "http.status_code"/"http.response.status_code".
+// Before this fix, that meant a service with no outbound calls of its own
+// (e.g. atlas-payment-service, a pure sink) could never register an error at
+// all, since it has no client-side span to fall back on either -- making it
+// impossible for such a service to ever become an incident's root cause.
+func TestProcessEvent_MicrometerStatusAttributeMarksError(t *testing.T) {
+	d := newTestDetector()
+
+	ev := event.ATLASEvent{
+		EventType:     event.EventTypeTraceSpan,
+		ServiceName:   "atlas-payment-service",
+		OperationName: "http post /api/payments",
+		Status:        "UNSET",
+		Attributes:    map[string]string{"status": "500", "outcome": "SERVER_ERROR"},
+		Timestamp:     time.Now(),
+	}
+
+	d.ProcessEvent(ev)
+
+	w := d.getWindow(ev.ServiceName, ev.OperationName)
+	if got := w.ErrorRate(); got != 1.0 {
+		t.Fatalf("expected the Micrometer-style \"status\" attribute to be treated as an error, got error rate %f", got)
+	}
+}
+
+func TestProcessEvent_MicrometerStatusAttributeSuccessIsNotAnError(t *testing.T) {
+	d := newTestDetector()
+
+	ev := event.ATLASEvent{
+		EventType:     event.EventTypeTraceSpan,
+		ServiceName:   "atlas-payment-service",
+		OperationName: "http post /api/payments",
+		Status:        "UNSET",
+		Attributes:    map[string]string{"status": "201", "outcome": "SUCCESS"},
+		Timestamp:     time.Now(),
+	}
+
+	d.ProcessEvent(ev)
+
+	w := d.getWindow(ev.ServiceName, ev.OperationName)
+	if got := w.ErrorRate(); got != 0.0 {
+		t.Fatalf("expected a 2xx \"status\" attribute to NOT be treated as an error, got error rate %f", got)
+	}
+}

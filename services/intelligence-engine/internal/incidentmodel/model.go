@@ -40,4 +40,11 @@ type Incident struct {
 	Score      int        `json:"score,omitempty"`
 
 	DetectionReason string `json:"detectionReason"`
+
+	// Correlation metadata (M2.7.1). Set by incidentmanager.Correlator before
+	// RCA runs. Does not affect Status or lifecycle; every open incident
+	// still transitions OPEN/RESOLVED independently per M2.4's own rules.
+	CorrelationGroupID string   `json:"correlationGroupId,omitempty"`
+	PrimaryIncidentID  string   `json:"primaryIncidentId,omitempty"`
+	RelatedIncidentIDs []string `json:"relatedIncidentIds,omitempty"`
 }
