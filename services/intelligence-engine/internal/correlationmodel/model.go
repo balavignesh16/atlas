@@ -95,6 +95,16 @@ type GraphSnapshot struct {
 // FromEvent creates a CorrelatedSpan from an ATLASEvent.
 func FromEvent(e *event.ATLASEvent) *CorrelatedSpan {
 	endTime := e.Timestamp.Add(time.Duration(e.DurationMs) * time.Millisecond)
+	// Status is normalized to "ERROR" when event.IsErrorStatus recognizes a
+	// real failure the raw Status field alone would miss (see that
+	// function's doc comment); non-error values (OK/UNSET) pass through
+	// unchanged, preserving the existing OK/ERROR/UNSET vocabulary every
+	// consumer (dependency graph edges, blast radius, temporal precedence)
+	// already compares against.
+	status := e.Status
+	if event.IsErrorStatus(e.Status, e.Attributes) {
+		status = "ERROR"
+	}
 	return &CorrelatedSpan{
 		SpanID:        e.SpanID,
 		ParentSpanID:  e.ParentSpanID,
@@ -104,7 +114,7 @@ func FromEvent(e *event.ATLASEvent) *CorrelatedSpan {
 		StartTime:     e.Timestamp,
 		EndTime:       endTime,
 		DurationMs:    e.DurationMs,
-		Status:        e.Status,
+		Status:        status,
 		Attributes:    e.Attributes, // Can be nil or map
 	}
 }
