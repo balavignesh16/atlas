@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   control-plane:
     build:
@@ -26,6 +24,7 @@ services:
       - ATLAS_ENGINE_PORT=8081
       - ATLAS_EXECUTION_ENABLED=${ATLAS_EXECUTION_ENABLED:-false}
       - ATLAS_EXECUTION_PROVIDER=${ATLAS_EXECUTION_PROVIDER:-docker}
+      - ATLAS_EXECUTION_TIMEOUT_SECONDS=${ATLAS_EXECUTION_TIMEOUT_SECONDS:-30}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
