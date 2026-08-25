@@ -153,7 +153,7 @@ func main() {
 
 	execGuard := execution.NewGuard(execEnabled)
 	execStore := execution.NewStore(retention)
-	execVerifier := execution.NewVerifier(incManager)
+	execVerifier := execution.NewVerifier(incManager, eventBuffer)
 
 	var execProvider execution.ExecutorProvider
 	if execEnabled && os.Getenv("ATLAS_EXECUTION_PROVIDER") == "docker" {

@@ -24,7 +24,17 @@ const (
 	VerificationPending VerificationStatus = "PENDING"
 	VerificationVerifying VerificationStatus = "VERIFYING"
 	VerificationVerified VerificationStatus = "VERIFIED"
+	// VerificationFailed means a genuinely observed matching error event for
+	// the target service occurred after the remediation execution finished.
+	// It is not triggered merely by Incident.LastUpdatedAt advancing or by
+	// repeated evaluation of stale rolling-window data.
 	VerificationFailed   VerificationStatus = "FAILED"
+	// VerificationTimeout means the deadline was reached with no positive
+	// confirmation of recovery and no positive evidence of continued
+	// failure either -- the incident may still recover shortly after this
+	// point. Distinct from VerificationFailed on purpose: absence of
+	// confirmation is not evidence of failure.
+	VerificationTimeout  VerificationStatus = "VERIFICATION_TIMEOUT"
 	VerificationNotRequired VerificationStatus = "NOT_REQUIRED"
 )
 

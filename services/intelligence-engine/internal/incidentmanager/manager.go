@@ -186,6 +186,13 @@ func (m *Manager) GetIncident(id string) *incidentmodel.Incident {
 	return cloneIncident(inc)
 }
 
+// RecoverySeconds returns the configured recovery window, read-only, so
+// callers outside this package (e.g. execution.Verifier) can reason about
+// an incident's own recovery clock without duplicating or overriding it.
+func (m *Manager) RecoverySeconds() time.Duration {
+	return m.cfg.RecoverySeconds
+}
+
 func (m *Manager) UpdateIncident(inc *incidentmodel.Incident) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

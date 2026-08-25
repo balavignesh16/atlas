@@ -18,7 +18,7 @@ type ExecutorProvider interface {
 }
 
 type VerificationProvider interface {
-	Verify(ctx context.Context, incidentID string, serviceName string) VerificationStatus
+	Verify(ctx context.Context, incidentID string, serviceName string, executionFinishedAt time.Time) VerificationStatus
 }
 
 type Engine struct {
@@ -113,7 +113,7 @@ func (e *Engine) ExecutePlanAction(ctx context.Context, plan *remediation.Remedi
 			record.VerificationStatus = VerificationVerifying
 			e.store.Save(record)
 			
-			go e.runVerification(record.ExecutionID, record.IncidentID, record.Service)
+			go e.runVerification(record.ExecutionID, record.IncidentID, record.Service, now)
 		} else {
 			record.VerificationStatus = VerificationNotRequired
 			e.store.Save(record)
@@ -123,21 +123,25 @@ func (e *Engine) ExecutePlanAction(ctx context.Context, plan *remediation.Remedi
 	return record, nil
 }
 
-func (e *Engine) runVerification(execID, incidentID, serviceName string) {
-	// Let the system stabilize
-	time.Sleep(5 * time.Second)
-
+func (e *Engine) runVerification(execID, incidentID, serviceName string, executionFinishedAt time.Time) {
+	// This context is a hard safety-net ceiling (also bounds process
+	// shutdown/cancellation), not the driver of the actual wait -- Verify
+	// computes its own incident-recovery-aware budget internally and never
+	// waits longer than this ceiling.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(e.timeoutSeconds)*time.Second)
 	defer cancel()
 
-	status := e.verifier.Verify(ctx, incidentID, serviceName)
-	
+	status := e.verifier.Verify(ctx, incidentID, serviceName, executionFinishedAt)
+
 	if record, ok := e.store.Get(execID); ok {
 		record.VerificationStatus = status
-		if status == VerificationFailed {
-			record.Message += " (Verification Failed: incident telemetry still shows degradation)"
-		} else if status == VerificationVerified {
+		switch status {
+		case VerificationFailed:
+			record.Message += " (Verification Failed: incident telemetry shows renewed degradation after remediation)"
+		case VerificationVerified:
 			record.Message += " (Verification Passed: service is healthy)"
+		case VerificationTimeout:
+			record.Message += " (Verification Timeout: recovery not yet confirmed within the verification window)"
 		}
 		e.store.Save(record)
 	}

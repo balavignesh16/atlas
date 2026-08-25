@@ -111,3 +111,12 @@ func TestProcessSignal_ConcurrentTraceIDAppendsAreThreadSafe(t *testing.T) {
 		t.Fatalf("expected TraceIDs capped at %d after concurrent appends, got %d", MaxTraceIDsPerIncident, got)
 	}
 }
+
+func TestRecoverySeconds_ReturnsConfiguredValue(t *testing.T) {
+	cfg := Config{RecoverySeconds: 42 * time.Second, RetentionSeconds: time.Hour}
+	m := NewManager(cfg, evidence.NewStore())
+
+	if got := m.RecoverySeconds(); got != 42*time.Second {
+		t.Fatalf("expected RecoverySeconds() to return the configured value 42s, got %v", got)
+	}
+}

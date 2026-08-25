@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/atlas/intelligence-engine/internal/execution"
 	"github.com/atlas/intelligence-engine/internal/remediation"
@@ -20,7 +21,7 @@ import (
 // restarts a real container.
 type stubVerifier struct{}
 
-func (stubVerifier) Verify(ctx context.Context, incidentID string, serviceName string) execution.VerificationStatus {
+func (stubVerifier) Verify(ctx context.Context, incidentID string, serviceName string, executionFinishedAt time.Time) execution.VerificationStatus {
 	return execution.VerificationVerified
 }
 
