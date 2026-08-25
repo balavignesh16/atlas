@@ -80,7 +80,8 @@ func main() {
 	// M2.4 Initialization
 	evStore := evidence.NewStore()
 	signalsChan := make(chan incidentsignal.Signal, 10000)
-	detector := incidentdetector.NewDetector(incidentdetector.DefaultConfig(), depGraph, signalsChan)
+	detectorCfg := incidentdetector.DefaultConfig()
+	detector := incidentdetector.NewDetector(detectorCfg, depGraph, signalsChan)
 	incManager := incidentmanager.NewManager(incidentmanager.DefaultConfig(), evStore)
 	propAnalyzer := propagation.NewAnalyzer(depGraph, corrEngine)
 	blastAnalyzer := blast.NewAnalyzer(corrEngine)
@@ -93,6 +94,12 @@ func main() {
 		correlationWindow = w
 	}
 	correlator := incidentmanager.NewCorrelator(correlationWindow)
+
+	// M2.7.3: causal evidence attribution. Runs after correlation, before RCA;
+	// rca.Engine itself is unmodified. minObservations/DependencyErrorRateThreshold
+	// are the SAME values passed to the Detector above (detectorCfg), not a
+	// second, independently-declared threshold -- see causal.go's doc comment.
+	causalAnalyzer := incidentmanager.NewCausalAnalyzer(detectorCfg.MinObservations, detectorCfg.DependencyErrorRateThreshold)
 
 	// M2.5 Initialization
 	aiCfg := aireasoning.Config{
@@ -193,6 +200,11 @@ func main() {
 			// cascade on the group's primary incident instead of scoring each
 			// service in isolation. Metadata-only; never changes Status.
 			correlator.Correlate(openIncs, depGraph, now)
+
+			// M2.7.3: re-attribute DEPENDENCY_ERROR evidence from a caller to
+			// the callee it actually names, before RCA scores it. rca.Engine
+			// itself is unmodified -- see causal.go for the full rationale.
+			causalAnalyzer.ApplyCausalAttribution(openIncs, depGraph, evStore)
 
 			for _, inc := range openIncs {
 				rcaEngine.Analyze(inc)

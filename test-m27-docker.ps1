@@ -142,11 +142,47 @@ try {
 }
 
 if (-not $scenarioAPlanBlocked) {
+    # M2.7.3: causal attribution can now let a real cascade resolve
+    # non-ambiguously (payment's redirected DEPENDENCY_ERROR credit lifts it
+    # to MEDIUM confidence, which M2.6's policy allows through). When that
+    # happens, prove the full chain for real rather than stopping at plan
+    # generation -- no gate is weakened to get here; this only runs if RCA
+    # already cleared M2.6's unmodified policy on its own merit.
     $plan = Invoke-RestMethod -Uri "http://localhost:8081/api/v1/incidents/$incidentId/remediation" -UseBasicParsing
     if ($plan.actions[0].targetService -ne "atlas-payment-service") {
         Write-Error "Expected the plan's action to target atlas-payment-service, got $($plan.actions[0].targetService)"
     }
     Write-Host "RCA was non-ambiguous and sufficiently confident this run -- plan targets atlas-payment-service as expected."
+
+    $planId = $plan.planId
+    Write-Host "Plan ID: $planId. Approving..."
+    $approvalReq = @{ approver = "test-admin"; reason = "Executing M2.7.3 causal-attribution cascade scenario" }
+    Invoke-RestMethod -Uri "http://localhost:8081/api/v1/remediation/$planId/approve" -Method POST -Body ($approvalReq | ConvertTo-Json) -Headers @{"Content-Type"="application/json"} | Out-Null
+
+    $planApproved = Invoke-RestMethod -Uri "http://localhost:8081/api/v1/incidents/$incidentId/remediation" -UseBasicParsing
+    $actionId = $planApproved.actions[0].actionId
+    Write-Host "Executing Plan Action ID $actionId..."
+    $execReq = @{ actionId = $actionId; approver = "test-admin" }
+    $execRecord = Invoke-RestMethod -Uri "http://localhost:8081/api/v1/remediation/$planId/execute" -Method POST -Body ($execReq | ConvertTo-Json) -Headers @{"Content-Type"="application/json"} -UseBasicParsing
+
+    Write-Host "Execution Status: $($execRecord.executionStatus)"
+    if ($execRecord.executionStatus -ne "EXECUTED") {
+        Write-Error "Execution did not succeed: $($execRecord.message) / $($execRecord.error)"
+    }
+
+    $verifStatus = "VERIFYING"
+    $vRetries = 0
+    while (($verifStatus -eq "VERIFYING" -or $verifStatus -eq "PENDING") -and $vRetries -lt 15) {
+        Start-Sleep -Seconds 2
+        $check = Invoke-RestMethod -Uri "http://localhost:8081/api/v1/executions/$($execRecord.executionId)" -UseBasicParsing
+        $verifStatus = $check.verificationStatus
+        $vRetries++
+    }
+    Write-Host "Final Verification Status: $verifStatus"
+    if ($verifStatus -ne "VERIFIED") {
+        Write-Error "Expected verification to reach VERIFIED, got $verifStatus"
+    }
+    Write-Host "SCENARIO A reached full plan -> approve -> execute -> verify against live infrastructure, driven entirely by causal-attribution-derived confidence."
 }
 
 Write-Host ""
