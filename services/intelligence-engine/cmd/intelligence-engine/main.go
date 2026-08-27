@@ -32,6 +32,7 @@ import (
 	"github.com/atlas/intelligence-engine/internal/execution"
 	execprovider "github.com/atlas/intelligence-engine/internal/execution/provider"
 	"github.com/atlas/intelligence-engine/internal/infrastructure/docker"
+	"github.com/atlas/intelligence-engine/internal/security"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +171,19 @@ func main() {
 	execEngine := execution.NewEngine(execGuard, execProvider, execVerifier, execStore, execTimeout)
 	executionAPI := httpapi.NewExecutionAPI(execEngine, rmPlanner)
 
+	// M2.9 Initialization: API-key authentication + RBAC. Disabled by
+	// default (ATLAS_SECURITY_ENABLED=false), matching this project's
+	// existing ATLAS_EXECUTION_ENABLED convention, so pre-M2.9 callers
+	// (test-m27-docker.ps1, test-m28-chaos.ps1) are unaffected unless this
+	// is explicitly turned on.
+	securityEnabled := os.Getenv("ATLAS_SECURITY_ENABLED") == "true"
+	apiKeys, err := security.ParseAPIKeys(os.Getenv("ATLAS_API_KEYS"))
+	if err != nil {
+		slog.Error("Failed to parse ATLAS_API_KEYS", "error", err)
+		os.Exit(1)
+	}
+	authorizer := security.NewAuthorizer(securityEnabled, apiKeys)
+
 	go func() {
 		for sig := range signalsChan {
 			incManager.ProcessSignal(sig)
@@ -265,7 +279,9 @@ func main() {
 			id := parts[4]
 			if len(parts) == 7 && parts[6] == "plan" {
 				if r.Method == http.MethodPost {
-					remediationAPI.HandlePostPlan(w, r, id)
+					authorizer.Protect(security.PermissionCreatePlan, func(w http.ResponseWriter, r *http.Request) {
+						remediationAPI.HandlePostPlan(w, r, id)
+					}).ServeHTTP(w, r)
 				} else {
 					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 				}
@@ -295,15 +311,15 @@ func main() {
 		parts := strings.Split(r.URL.Path, "/")
 		if len(parts) >= 6 {
 			if parts[5] == "approve" && r.Method == http.MethodPost {
-				remediationAPI.HandleApprove(w, r)
+				authorizer.Protect(security.PermissionApprovePlan, remediationAPI.HandleApprove).ServeHTTP(w, r)
 				return
 			}
 			if parts[5] == "reject" && r.Method == http.MethodPost {
-				remediationAPI.HandleReject(w, r)
+				authorizer.Protect(security.PermissionApprovePlan, remediationAPI.HandleReject).ServeHTTP(w, r)
 				return
 			}
 			if parts[5] == "execute" && r.Method == http.MethodPost {
-				executionAPI.HandleExecute(w, r)
+				authorizer.Protect(security.PermissionExecute, executionAPI.HandleExecute).ServeHTTP(w, r)
 				return
 			}
 		}

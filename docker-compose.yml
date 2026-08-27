@@ -25,6 +25,8 @@ services:
       - ATLAS_EXECUTION_ENABLED=${ATLAS_EXECUTION_ENABLED:-false}
       - ATLAS_EXECUTION_PROVIDER=${ATLAS_EXECUTION_PROVIDER:-docker}
       - ATLAS_EXECUTION_TIMEOUT_SECONDS=${ATLAS_EXECUTION_TIMEOUT_SECONDS:-30}
+      - ATLAS_SECURITY_ENABLED=${ATLAS_SECURITY_ENABLED:-false}
+      - ATLAS_API_KEYS=${ATLAS_API_KEYS:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
