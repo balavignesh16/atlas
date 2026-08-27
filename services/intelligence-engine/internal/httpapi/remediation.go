@@ -9,6 +9,7 @@ import (
 	"github.com/atlas/intelligence-engine/internal/evidence"
 	"github.com/atlas/intelligence-engine/internal/incidentmanager"
 	"github.com/atlas/intelligence-engine/internal/remediation"
+	"github.com/atlas/intelligence-engine/internal/security"
 )
 
 type RemediationAPI struct {
@@ -107,7 +108,18 @@ func (api *RemediationAPI) HandleApprove(w http.ResponseWriter, r *http.Request)
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	plan, err := api.rmPlanner.ApprovePlan(planID, req.Reason)
+	// The approval request body carries no identity field by design (see
+	// docs/m29_verification_report.md): approval identity comes only from
+	// the authenticated principal attached by internal/security, never from
+	// anything a client could put in the request. When security is
+	// disabled, no principal is present and approvedBy stays "" -- matching
+	// pre-M2.9 behavior (ApprovalMetadata.ApprovedBy did not exist before).
+	approvedBy := ""
+	if principal, ok := security.FromContext(r.Context()); ok {
+		approvedBy = principal.Name
+	}
+
+	plan, err := api.rmPlanner.ApprovePlan(planID, req.Reason, approvedBy)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

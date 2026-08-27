@@ -7,6 +7,7 @@ import (
 
 	"github.com/atlas/intelligence-engine/internal/execution"
 	"github.com/atlas/intelligence-engine/internal/remediation"
+	"github.com/atlas/intelligence-engine/internal/security"
 )
 
 type ExecutionAPI struct {
@@ -38,6 +39,10 @@ func (api *ExecutionAPI) HandleExecute(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		ActionID string `json:"actionId"`
+		// Approver is retained for backward compatibility (M2.7/M2.8 test
+		// scripts still send it, and it's used as a fallback display value
+		// when security is disabled) but is NEVER the trust source for
+		// executor identity when a request is authenticated -- see below.
 		Approver string `json:"approver"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -45,7 +50,18 @@ func (api *ExecutionAPI) HandleExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, err := api.engine.ExecutePlanAction(r.Context(), plan, req.ActionID, req.Approver)
+	// Executor identity comes from the authenticated principal (M2.9) when
+	// one is present, never from the client-supplied req.Approver -- a
+	// caller cannot claim to be someone else by setting that field. Falls
+	// back to req.Approver only when no principal is attached, i.e.
+	// security is disabled (ATLAS_SECURITY_ENABLED=false, the default),
+	// preserving pre-M2.9 behavior exactly.
+	approver := req.Approver
+	if principal, ok := security.FromContext(r.Context()); ok {
+		approver = principal.Name
+	}
+
+	record, err := api.engine.ExecutePlanAction(r.Context(), plan, req.ActionID, approver)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)

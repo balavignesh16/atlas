@@ -45,6 +45,13 @@ type ApprovalMetadata struct {
 	ApprovalReason      string     `json:"approvalReason,omitempty"`
 	RejectionReason     string     `json:"rejectionReason,omitempty"`
 	ApprovedFingerprint string     `json:"approvedFingerprint,omitempty"`
+	// ApprovedBy is the authenticated principal name that approved this
+	// plan (M2.9), populated by the HTTP layer from request-context
+	// identity established by internal/security -- never from a
+	// client-supplied request body field. Empty when security is disabled
+	// (ATLAS_SECURITY_ENABLED=false, the default), preserving pre-M2.9
+	// behavior exactly.
+	ApprovedBy string `json:"approvedBy,omitempty"`
 }
 
 type RemediationPlan struct {

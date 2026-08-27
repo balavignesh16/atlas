@@ -90,7 +90,11 @@ func (p *Planner) GeneratePlan(ctx context.Context, incident *incidentmodel.Inci
 	return plan, nil
 }
 
-func (p *Planner) ApprovePlan(planID string, reason string) (*RemediationPlan, error) {
+// approvedBy is the authenticated principal name (from internal/security's
+// request-context identity, resolved at the HTTP layer) that approved this
+// plan -- never a client-supplied request body value. Empty when security
+// is disabled, matching pre-M2.9 behavior.
+func (p *Planner) ApprovePlan(planID string, reason string, approvedBy string) (*RemediationPlan, error) {
 	p.store.mu.Lock()
 	defer p.store.mu.Unlock()
 
@@ -109,6 +113,7 @@ func (p *Planner) ApprovePlan(planID string, reason string) (*RemediationPlan, e
 		ApprovedAt:          &now,
 		ApprovalReason:      reason,
 		ApprovedFingerprint: plan.Fingerprint,
+		ApprovedBy:          approvedBy,
 	}
 
 	// Safe copy
