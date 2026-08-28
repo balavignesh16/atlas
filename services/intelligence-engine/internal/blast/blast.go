@@ -24,6 +24,7 @@ func (a *Analyzer) Calculate(inc *incidentmodel.Incident) {
 	services := make(map[string]bool)
 	operations := make(map[string]bool)
 	edges := make(map[string]bool)
+	traceCount := 0
 	failureCount := 0
 
 	for _, traceID := range inc.TraceIDs {
@@ -31,6 +32,7 @@ func (a *Analyzer) Calculate(inc *incidentmodel.Incident) {
 		if !ok {
 			continue
 		}
+		traceCount++
 
 		if traceDTO.OverallStatus == "ERROR" {
 			failureCount++
@@ -70,9 +72,11 @@ func (a *Analyzer) Calculate(inc *incidentmodel.Incident) {
 		inc.AffectedEdges = append(inc.AffectedEdges, e)
 	}
 
-	// Wait, we cannot easily set TraceCount on Incident since it's just len(TraceIDs)
-	// But it says Calculate: TraceCount, FailureCount
-	// Maybe we should store it in the incident?
-	// Oh, incident model doesn't explicitly have TraceCount / FailureCount fields yet, but we can just use len(TraceIDs)
-	// Wait, we could add TraceCount and FailureCount to Incident struct if needed.
+	// TraceCount/FailureCount count only the trace IDs that actually resolved
+	// via corrEngine.GetTrace (traceCount), not len(inc.TraceIDs) -- a
+	// TraceID can be present on the incident but no longer resolvable (e.g.
+	// aged out of correlation retention), and such a trace contributes no
+	// evidence to either count.
+	inc.TraceCount = traceCount
+	inc.FailureCount = failureCount
 }
