@@ -53,3 +53,66 @@ jobs:
 
     - name: Java Test and Build (Control Plane)
       run: cd services/control-plane && mvn clean test package
+
+  docker-e2e:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # test-m27-docker.ps1 (frozen, unmodified) never sets these itself --
+    # unlike test-m29-security.ps1/test-m211-security-read.ps1, which set
+    # both internally -- it relies entirely on the invoking shell already
+    # having them set. docker-compose.yml defaults ATLAS_EXECUTION_ENABLED
+    # to false (fail-closed by design), so a genuinely clean environment
+    # (a fresh GitHub Actions runner, exactly like this job) fails Scenario
+    # A's execute call with "execution is disabled by configuration" without
+    # this. Confirmed by reproducing the failure locally in a clean shell
+    # with no pre-set environment before adding this. Setting it here is
+    # environment provisioning for the existing test to run as designed --
+    # it does not modify the script or any production safety default.
+    env:
+      ATLAS_EXECUTION_ENABLED: "true"
+      ATLAS_EXECUTION_PROVIDER: "docker"
+    steps:
+    - uses: actions/checkout@v4
+
+    # test-m27-docker.ps1 (frozen, unmodified) invokes the legacy hyphenated
+    # `docker-compose` CLI throughout. Some ubuntu-latest runner image
+    # revisions ship only the `docker compose` v2 plugin. This step never
+    # touches the test script -- it only ensures the CLI name the script
+    # already expects resolves to whichever real implementation is present.
+    - name: Ensure docker-compose CLI is available
+      run: |
+        if ! command -v docker-compose >/dev/null 2>&1; then
+          echo "docker-compose (v1 CLI) not found on PATH; installing a shim that forwards to 'docker compose' (v2 plugin)."
+          sudo tee /usr/local/bin/docker-compose > /dev/null <<'SHIM'
+        #!/usr/bin/env bash
+        exec docker compose "$@"
+        SHIM
+          sudo chmod +x /usr/local/bin/docker-compose
+        fi
+        docker-compose version
+
+    - name: Verify pwsh is available
+      run: pwsh --version
+
+    # test-m27-docker.ps1 itself runs `docker-compose down` + `docker-compose
+    # up -d --build` and then polls the gateway's own health endpoint before
+    # proceeding (see the script) -- it is self-contained for build/bring-up
+    # and readiness, so this step only needs to invoke it directly, exactly
+    # as it is already run locally, without -SkipBuild.
+    - name: Run Docker E2E (test-m27-docker.ps1)
+      run: pwsh -File ./test-m27-docker.ps1
+
+    # test-m27-docker.ps1 does not tear down the stack itself (by design --
+    # it is also used locally with -SkipBuild for a follow-up run), so CI
+    # owns cleanup. This step is separate from teardown below so a failure
+    # here can never mask the E2E step's own pass/fail result.
+    - name: Collect service logs on failure
+      if: failure()
+      run: |
+        docker-compose ps
+        docker-compose logs --no-color
+
+    - name: Tear down Docker Compose stack
+      if: always()
+      run: docker-compose down
