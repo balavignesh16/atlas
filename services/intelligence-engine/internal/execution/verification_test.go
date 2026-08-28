@@ -402,3 +402,110 @@ func TestVerify_DoesNotMutateIncidentLifecycleState(t *testing.T) {
 		t.Fatalf("Verify must never mutate LastUpdatedAt; before=%v after=%v", before.LastUpdatedAt, after.LastUpdatedAt)
 	}
 }
+
+// ============================================================================
+// M2.13 regression coverage: RESOLVED alone must never be sufficient for
+// VERIFIED when genuine post-execution failure evidence already exists for
+// the remediated service. See docs/m213_verification_report.md for the full
+// root-cause analysis (the incident manager's recovery clock can resolve an
+// incident purely from absence of a fresh signal touching that specific
+// incident record, independent of whether the remediated service is
+// actually healthy). Each test below is written to fail against the
+// pre-M2.13 code (which returned VerificationVerified the instant
+// Status=="RESOLVED" was observed, on every path, without ever consulting
+// the EventBuffer) and pass against the fixed code -- confirmed directly,
+// not assumed (see the verification report's "why these tests catch the old
+// behavior" section for the exact before/after run evidence).
+// ============================================================================
+
+// M2.13-C: incident already RESOLVED at Verify's entry check, with genuine
+// post-execution failure evidence already in the buffer. Must be FAILED,
+// never VERIFIED -- this is the exact live defect M2.12 exposed.
+func TestVerify_ResolvedWithGenuinePostExecutionFailure_ReturnsFailedNotVerified(t *testing.T) {
+	mgr := incidentmanager.NewManager(incidentmanager.DefaultConfig(), evidence.NewStore())
+	id := newVerificationTestIncident(t, mgr, "svc-n", time.Now())
+	executionFinishedAt := time.Now()
+	setVerificationTestIncidentState(mgr, id, incidentmodel.StatusResolved, time.Now())
+
+	buf := buffer.NewEventBuffer(100)
+	buf.Add(newTestEvent("svc-n", executionFinishedAt.Add(1*time.Second), true))
+
+	v := execution.NewVerifier(mgr, buf)
+	status := v.Verify(context.Background(), id, "svc-n", executionFinishedAt)
+
+	if status != execution.VerificationFailed {
+		t.Fatalf("expected FAILED when RESOLVED coincides with genuine post-execution failure evidence, got %s -- a false VERIFIED here is exactly the M2.12-exposed safety defect (\"Verification Passed: service is healthy\" reported despite fresh real failure evidence)", status)
+	}
+}
+
+// M2.13-D: the incident is still OPEN when Verify starts (so the ticker/poll
+// path, not the entry check, is what observes RESOLVED), genuine
+// post-execution failure evidence is already present, and the incident
+// resolves mid-poll. Must be FAILED -- proves the ticker path applies the
+// same evidence-first rule as the entry check, not just the entry check
+// alone.
+func TestVerify_ResolvesMidPollWithGenuinePostExecutionFailure_ReturnsFailedNotVerified(t *testing.T) {
+	mgr := incidentmanager.NewManager(incidentmanager.Config{RecoverySeconds: 60 * time.Second, RetentionSeconds: time.Hour}, evidence.NewStore())
+	id := newVerificationTestIncident(t, mgr, "svc-o", time.Now())
+	executionFinishedAt := time.Now()
+	buf := buffer.NewEventBuffer(100)
+	buf.Add(newTestEvent("svc-o", executionFinishedAt.Add(1*time.Second), true))
+
+	go func() {
+		time.Sleep(3 * time.Second)
+		setVerificationTestIncidentState(mgr, id, incidentmodel.StatusResolved, time.Now())
+	}()
+
+	v := execution.NewVerifier(mgr, buf)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	status := v.Verify(ctx, id, "svc-o", executionFinishedAt)
+	if status != execution.VerificationFailed {
+		t.Fatalf("expected FAILED when the incident resolves mid-poll while genuine post-execution failure evidence is already present in the buffer, got %s", status)
+	}
+}
+
+// M2.13-F boundary: an event timestamped exactly AT executionFinishedAt (not
+// strictly after) must not count as post-execution evidence, even when the
+// incident is RESOLVED -- the new RESOLVED-path evidence check must preserve
+// the exact strict-after boundary hasGenuinePostExecutionFailure already
+// enforced for the FAILED path.
+func TestVerify_ResolvedWithEvidenceExactlyAtExecutionFinishedAt_ReturnsVerified(t *testing.T) {
+	mgr := incidentmanager.NewManager(incidentmanager.DefaultConfig(), evidence.NewStore())
+	id := newVerificationTestIncident(t, mgr, "svc-q", time.Now())
+	executionFinishedAt := time.Now()
+	setVerificationTestIncidentState(mgr, id, incidentmodel.StatusResolved, time.Now())
+
+	buf := buffer.NewEventBuffer(100)
+	buf.Add(newTestEvent("svc-q", executionFinishedAt, true)) // exactly at, not strictly after
+
+	v := execution.NewVerifier(mgr, buf)
+	status := v.Verify(context.Background(), id, "svc-q", executionFinishedAt)
+
+	if status != execution.VerificationVerified {
+		t.Fatalf("expected VERIFIED: an event timestamped exactly at (not strictly after) executionFinishedAt must not count as post-execution failure evidence, got %s", status)
+	}
+}
+
+// M2.13-G: genuine post-execution failure evidence for a DIFFERENT service
+// must never block a genuine VERIFIED verdict for the remediated service,
+// even when the incident is RESOLVED and both events coexist in the same
+// buffer -- proves the new RESOLVED-path evidence check is still correctly
+// scoped to serviceName, not global to the buffer.
+func TestVerify_ResolvedWithUnrelatedServiceFailure_StillReturnsVerified(t *testing.T) {
+	mgr := incidentmanager.NewManager(incidentmanager.DefaultConfig(), evidence.NewStore())
+	id := newVerificationTestIncident(t, mgr, "svc-p", time.Now())
+	executionFinishedAt := time.Now()
+	setVerificationTestIncidentState(mgr, id, incidentmodel.StatusResolved, time.Now())
+
+	buf := buffer.NewEventBuffer(100)
+	buf.Add(newTestEvent("svc-unrelated", executionFinishedAt.Add(1*time.Second), true))
+
+	v := execution.NewVerifier(mgr, buf)
+	status := v.Verify(context.Background(), id, "svc-p", executionFinishedAt)
+
+	if status != execution.VerificationVerified {
+		t.Fatalf("expected VERIFIED: RESOLVED with no genuine failure evidence for THIS service, even though an unrelated service has failure evidence in the same buffer; got %s", status)
+	}
+}

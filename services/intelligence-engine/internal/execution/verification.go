@@ -45,6 +45,16 @@ func NewVerifier(manager *incidentmanager.Manager, eventBuffer *buffer.EventBuff
 // which get re-stamped to "now" on every M2.4 evaluation cycle regardless
 // of whether the underlying window contents are fresh or stale (see
 // docs/m274_verification_report.md).
+//
+// M2.13: Status=="RESOLVED" is NOT sufficient on its own for VERIFIED (see
+// verdictForResolved). The incident manager's recovery clock resolves an
+// incident purely from absence of a fresh signal touching THAT SPECIFIC
+// incident record -- which can happen even while a genuinely new
+// post-execution failure already sits in the EventBuffer, if the fresh
+// failure's signal ends up creating a different incident record instead of
+// refreshing this one (see docs/m213_verification_report.md). Every path
+// that observes RESOLVED now checks for genuine post-execution failure
+// evidence first, exactly like the existing FAILED path already does.
 func (v *Verifier) Verify(ctx context.Context, incidentID string, serviceName string, executionFinishedAt time.Time) VerificationStatus {
 	log.Printf("[INFO] Verifying execution outcome for incident %s, service %s", incidentID, serviceName)
 
@@ -55,7 +65,7 @@ func (v *Verifier) Verify(ctx context.Context, incidentID string, serviceName st
 		return VerificationTimeout
 	}
 	if inc.Status == "RESOLVED" {
-		return VerificationVerified
+		return v.verdictForResolved(serviceName, executionFinishedAt)
 	}
 
 	// Compute how much of the incident's own recovery clock is left, so the
@@ -89,7 +99,7 @@ func (v *Verifier) Verify(ctx context.Context, incidentID string, serviceName st
 				continue
 			}
 			if latest.Status == "RESOLVED" {
-				return VerificationVerified
+				return v.verdictForResolved(serviceName, executionFinishedAt)
 			}
 			// Still open: keep waiting. Whether it counts as FAILED or
 			// TIMEOUT once the deadline arrives is decided by finalVerdict,
@@ -100,22 +110,41 @@ func (v *Verifier) Verify(ctx context.Context, incidentID string, serviceName st
 }
 
 // finalVerdict is the single place that turns "we stopped waiting" into a
-// terminal status. VERIFIED requires a direct Status=="RESOLVED" observation.
-// FAILED requires positive evidence from the real EventBuffer: an actual
-// ingested ERROR event for this service, timestamped strictly after
-// executionFinishedAt. Absence of either -- including a stale error still
-// sitting inside M2.4's rolling window, which keeps re-affirming itself on
-// every evaluation tick without any new real event -- conservatively
-// resolves to TIMEOUT, never FAILED.
+// terminal status. VERIFIED requires a direct Status=="RESOLVED" observation
+// AND the absence of genuine post-execution failure evidence (see
+// verdictForResolved). FAILED requires positive evidence from the real
+// EventBuffer: an actual ingested ERROR event for this service, timestamped
+// strictly after executionFinishedAt. Absence of either -- including a
+// stale error still sitting inside M2.4's rolling window, which keeps
+// re-affirming itself on every evaluation tick without any new real event
+// -- conservatively resolves to TIMEOUT, never FAILED.
 func (v *Verifier) finalVerdict(incidentID string, serviceName string, executionFinishedAt time.Time) VerificationStatus {
 	final := v.manager.GetIncident(incidentID)
 	if final != nil && final.Status == "RESOLVED" {
-		return VerificationVerified
+		return v.verdictForResolved(serviceName, executionFinishedAt)
 	}
 	if v.hasGenuinePostExecutionFailure(serviceName, executionFinishedAt) {
 		return VerificationFailed
 	}
 	return VerificationTimeout
+}
+
+// verdictForResolved decides between VERIFIED and FAILED once an incident's
+// Status has been observed as RESOLVED. RESOLVED alone is not sufficient
+// (M2.13): the incident manager's recovery clock can resolve an incident
+// purely from absence of a fresh signal touching THAT SPECIFIC incident
+// record, independent of whether the remediated service is actually
+// healthy -- a genuinely new post-execution failure can already be sitting
+// in the EventBuffer at the exact moment RESOLVED is observed, e.g. because
+// the fresh failure's signal created a new incident record instead of
+// refreshing this one. Genuine EventBuffer evidence always takes precedence
+// over an incidental RESOLVED observation, using the exact same evidence
+// check the FAILED path has always used -- no new evidence mechanism.
+func (v *Verifier) verdictForResolved(serviceName string, executionFinishedAt time.Time) VerificationStatus {
+	if v.hasGenuinePostExecutionFailure(serviceName, executionFinishedAt) {
+		return VerificationFailed
+	}
+	return VerificationVerified
 }
 
 // hasGenuinePostExecutionFailure scans the real, already-populated event
