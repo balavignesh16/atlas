@@ -243,13 +243,13 @@ func main() {
 	mux.HandleFunc("/v1/traces", otlpHandler.HandleTraces)
 	mux.HandleFunc("/v1/metrics", otlpHandler.HandleMetrics)
 
-	// Verification APIs
-	mux.HandleFunc("/api/v1/events", apiHandler.HandleGetEvents)
-	mux.HandleFunc("/api/v1/events/metrics", apiHandler.HandleGetMetrics)
-	mux.HandleFunc("/api/v1/events/trace/", apiHandler.HandleGetEventsByTrace)
+	// Verification APIs (M2.11: read-only telemetry -> PermissionView)
+	mux.Handle("/api/v1/events", authorizer.Protect(security.PermissionView, apiHandler.HandleGetEvents))
+	mux.Handle("/api/v1/events/metrics", authorizer.Protect(security.PermissionView, apiHandler.HandleGetMetrics))
+	mux.Handle("/api/v1/events/trace/", authorizer.Protect(security.PermissionView, apiHandler.HandleGetEventsByTrace))
 
-	// Correlation APIs
-	mux.HandleFunc("/api/v1/correlations/traces/", func(w http.ResponseWriter, r *http.Request) {
+	// Correlation APIs (M2.11: read-only trace correlation -> PermissionView)
+	mux.Handle("/api/v1/correlations/traces/", authorizer.Protect(security.PermissionView, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/tree") {
 			corrAPI.HandleGetTraceTree(w, r)
 			return
@@ -259,18 +259,18 @@ func main() {
 			return
 		}
 		corrAPI.HandleGetTrace(w, r)
-	})
+	}))
 
-	// Graph APIs
-	mux.HandleFunc("/api/v1/graph/services/", graphAPI.HandleGetServiceDependencies)
-	mux.HandleFunc("/api/v1/graph/edges", graphAPI.HandleGetEdges)
-	mux.HandleFunc("/api/v1/graph", graphAPI.HandleGetGraph)
+	// Graph APIs (M2.11: read-only dependency graph -> PermissionView)
+	mux.Handle("/api/v1/graph/services/", authorizer.Protect(security.PermissionView, graphAPI.HandleGetServiceDependencies))
+	mux.Handle("/api/v1/graph/edges", authorizer.Protect(security.PermissionView, graphAPI.HandleGetEdges))
+	mux.Handle("/api/v1/graph", authorizer.Protect(security.PermissionView, graphAPI.HandleGetGraph))
 
-	// Incident APIs
+	// Incident APIs (M2.11: reads -> PermissionView; execution/audit history -> PermissionReadAudit)
 	mux.HandleFunc("/api/v1/incidents/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(r.URL.Path, "/")
 		if r.URL.Path == "/api/v1/incidents/open" {
-			incidentAPI.HandleGetOpenIncidents(w, r)
+			authorizer.Protect(security.PermissionView, incidentAPI.HandleGetOpenIncidents).ServeHTTP(w, r)
 			return
 		}
 		// Route remediation paths natively
@@ -288,7 +288,9 @@ func main() {
 				return
 			}
 			if r.Method == http.MethodGet {
-				remediationAPI.HandleGetPlanByIncident(w, r, id)
+				authorizer.Protect(security.PermissionView, func(w http.ResponseWriter, r *http.Request) {
+					remediationAPI.HandleGetPlanByIncident(w, r, id)
+				}).ServeHTTP(w, r)
 			} else {
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			}
@@ -296,15 +298,25 @@ func main() {
 		}
 		if len(parts) >= 6 && parts[5] == "executions" {
 			if r.Method == http.MethodGet {
-				executionAPI.HandleGetExecutionsByIncident(w, r)
+				authorizer.Protect(security.PermissionReadAudit, executionAPI.HandleGetExecutionsByIncident).ServeHTTP(w, r)
 			} else {
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			}
 			return
 		}
-		incidentAPI.HandleGetIncident(w, r)
+		// POST /{incidentId}/analyze triggers AI reasoning (mutates the
+		// aiEngine analysis cache); it is not a read and was unauthenticated
+		// before M2.11. Left exactly as-is -- out of M2.11's read-only RBAC
+		// scope -- by passing it through before the PermissionView gate below,
+		// which would otherwise also catch it since HandleGetIncident is the
+		// same entry point incident.go dispatches POST /analyze from.
+		if len(parts) >= 6 && parts[5] == "analyze" && r.Method == http.MethodPost {
+			incidentAPI.HandleGetIncident(w, r)
+			return
+		}
+		authorizer.Protect(security.PermissionView, incidentAPI.HandleGetIncident).ServeHTTP(w, r)
 	})
-	mux.HandleFunc("/api/v1/incidents", incidentAPI.HandleGetIncidents)
+	mux.Handle("/api/v1/incidents", authorizer.Protect(security.PermissionView, incidentAPI.HandleGetIncidents))
 
 	// Remediation API (/api/v1/remediation/...)
 	mux.HandleFunc("/api/v1/remediation/", func(w http.ResponseWriter, r *http.Request) {
@@ -324,22 +336,22 @@ func main() {
 			}
 		}
 		if r.Method == http.MethodGet {
-			remediationAPI.HandleGetPlan(w, r)
+			authorizer.Protect(security.PermissionView, remediationAPI.HandleGetPlan).ServeHTTP(w, r)
 			return
 		}
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	})
 
-	// Execution API (/api/v1/executions/...)
+	// Execution API (/api/v1/executions/...) -- execution/audit history -> PermissionReadAudit
 	mux.HandleFunc("/api/v1/executions/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			executionAPI.HandleGetExecution(w, r)
+			authorizer.Protect(security.PermissionReadAudit, executionAPI.HandleGetExecution).ServeHTTP(w, r)
 			return
 		}
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	})
 
-	mux.HandleFunc("/api/v1/events/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/v1/events/", authorizer.Protect(security.PermissionView, func(w http.ResponseWriter, r *http.Request) {
 		// Route disambiguation since /api/v1/events/ prefix matches both ID and Trace
 		if strings.HasPrefix(r.URL.Path, "/api/v1/events/trace/") {
 			apiHandler.HandleGetEventsByTrace(w, r)
@@ -355,7 +367,7 @@ func main() {
 		}
 		// Fallback to GetEventByID
 		apiHandler.HandleGetEventByID(w, r)
-	})
+	}))
 
 	srv := &http.Server{
 		Addr:    ":" + port,
