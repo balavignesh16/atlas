@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -209,5 +210,101 @@ func TestHandleGetIncident_AnalysisSubpath_NotFoundBeforeAnalyzeIsTriggered(t *t
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for an incident with no AI analysis triggered yet, got %d", rec.Code)
+	}
+}
+
+// Module 4: regression guard for the routing defect fixed in main.go (the
+// production dispatcher, not this handler, was calling the wrong function
+// for POST .../analyze). HandleGetIncident's own GET-only behavior for the
+// bare /{incidentId} path must remain exactly as it was.
+func TestHandleGetIncident_WrongMethod_StillReturns405(t *testing.T) {
+	api, manager := newTestIncidentAPI(t)
+	id := seedIncident(manager, "atlas-payment-service")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id, nil)
+	rec := httptest.NewRecorder()
+	api.HandleGetIncident(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for POST /api/v1/incidents/{id} (no /analyze subpath), got %d", rec.Code)
+	}
+}
+
+// Module 4: HandlePostAnalyze itself was always correct -- these are the
+// first tests to ever call it directly. Prior to this, only
+// aireasoning.Engine.Analyze was tested (bypassing HTTP entirely), which is
+// exactly why the main.go routing defect went undetected.
+func TestHandlePostAnalyze_Succeeds(t *testing.T) {
+	api, manager := newTestIncidentAPI(t)
+	id := seedIncident(manager, "atlas-payment-service")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id+"/analyze", nil)
+	rec := httptest.NewRecorder()
+	api.HandlePostAnalyze(rec, req, id)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var got aireasoning.AnalysisResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+	if got.IncidentID != id {
+		t.Errorf("expected IncidentID %q, got %q", id, got.IncidentID)
+	}
+	if got.Provider != "fake" {
+		t.Errorf("expected provider=fake (FakeProvider, no real AI call), got %q", got.Provider)
+	}
+	if got.Model != "fake-model" {
+		t.Errorf("expected model=fake-model, got %q", got.Model)
+	}
+	if got.ExecutiveSummary == "" {
+		t.Error("expected a non-empty executive summary from the real Engine.Analyze/FakeProvider path")
+	}
+}
+
+func TestHandlePostAnalyze_UnknownIncident_Returns404(t *testing.T) {
+	api, _ := newTestIncidentAPI(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/does-not-exist/analyze", nil)
+	rec := httptest.NewRecorder()
+	api.HandlePostAnalyze(rec, req, "does-not-exist")
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for an unknown incidentId, got %d", rec.Code)
+	}
+}
+
+// Module 4: a real incident with its EvidenceIDs cleared via the public
+// GetIncident/UpdateIncident round trip (the same technique used in
+// internal/serviceintel's tests) -- never a fabricated incident -- to prove
+// what the real FakeProvider/Validator pipeline actually does with missing
+// evidence. Traced directly from source (not assumed): FakeProvider
+// deliberately references a placeholder evidence ID ("E999999", see its own
+// comment "[t]o trigger validation failure intentionally in tests if they
+// don't provide evidence") when given zero evidence; Validator.Validate
+// then rejects that as an unknown/unsourced reference, and Engine.Analyze
+// returns ErrValidationFailed, which HandlePostAnalyze reports as 503. This
+// is the honest outcome: the system refuses to return an analysis it cannot
+// ground in real evidence, rather than fabricating one. A 200 here would
+// have meant either evidence was fabricated to satisfy the grounding check,
+// or the grounding check silently doesn't apply -- neither is true.
+func TestHandlePostAnalyze_MissingEvidence_ReportsHonestly(t *testing.T) {
+	api, manager := newTestIncidentAPI(t)
+	id := seedIncident(manager, "atlas-payment-service")
+
+	inc := manager.GetIncident(id)
+	inc.EvidenceIDs = []string{}
+	manager.UpdateIncident(inc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id+"/analyze", nil)
+	rec := httptest.NewRecorder()
+	api.HandlePostAnalyze(rec, req, id)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 -- the real evidence-grounding validator must honestly refuse an ungrounded analysis rather than fabricate one -- got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "ai analysis failed validation") {
+		t.Errorf("expected the real ErrValidationFailed message, got %q -- this must be the real validator rejecting an ungrounded reference, not an unrelated error", rec.Body.String())
 	}
 }

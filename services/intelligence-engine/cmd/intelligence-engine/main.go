@@ -377,14 +377,21 @@ func main() {
 			}
 			return
 		}
-		// POST /{incidentId}/analyze triggers AI reasoning (mutates the
-		// aiEngine analysis cache); it is not a read and was unauthenticated
-		// before M2.11. Left exactly as-is -- out of M2.11's read-only RBAC
-		// scope -- by passing it through before the PermissionView gate below,
-		// which would otherwise also catch it since HandleGetIncident is the
-		// same entry point incident.go dispatches POST /analyze from.
+		// Module 4: POST /{incidentId}/analyze triggers AI reasoning.
+		// Previously misrouted into HandleGetIncident (a GET-only handler --
+		// see incident.go's own top-of-function method guard), which meant
+		// this call always returned 405 and was also left unauthenticated
+		// even when ATLAS_SECURITY_ENABLED=true (an M2.11-era gap explicitly
+		// deferred, not a permanent decision -- see docs/ai-reasoning.md).
+		// Routed directly to the real, already-complete HandlePostAnalyze
+		// handler, gated by the same PermissionView its sibling
+		// GET .../analysis already requires -- this is advisory read/insight
+		// output, not a mutation of Incident/RemediationPlan/execution state.
 		if len(parts) >= 6 && parts[5] == "analyze" && r.Method == http.MethodPost {
-			incidentAPI.HandleGetIncident(w, r)
+			id := parts[4]
+			authorizer.Protect(security.PermissionView, func(w http.ResponseWriter, r *http.Request) {
+				incidentAPI.HandlePostAnalyze(w, r, id)
+			}).ServeHTTP(w, r)
 			return
 		}
 		authorizer.Protect(security.PermissionView, incidentAPI.HandleGetIncident).ServeHTTP(w, r)
