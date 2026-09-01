@@ -33,6 +33,7 @@ import (
 	execprovider "github.com/atlas/intelligence-engine/internal/execution/provider"
 	"github.com/atlas/intelligence-engine/internal/infrastructure/docker"
 	"github.com/atlas/intelligence-engine/internal/registry"
+	"github.com/atlas/intelligence-engine/internal/replay"
 	"github.com/atlas/intelligence-engine/internal/security"
 	"github.com/atlas/intelligence-engine/internal/serviceintel"
 )
@@ -181,6 +182,17 @@ func main() {
 	// history -- see docs/registry.md's "Service Intelligence" section.
 	intelligenceAssembler := serviceintel.NewAssembler(serviceRegistry, depGraph, incManager)
 	intelligenceAPI := httpapi.NewIntelligenceAPI(intelligenceAssembler)
+
+	// Module 5: read-only replay/simulation. Reuses the SAME aiProvider/
+	// rmProv objects production uses (so replay behaves identically to
+	// whatever AI/planner is actually configured), but wraps them in a
+	// fresh Engine/Planner per request (see internal/replay's own doc
+	// comment) so replay can never write into aiEngine's/rmPlanner's real,
+	// shared production store. aiEngine/rmPlanner themselves are also
+	// passed in, read-only, purely so replay can report a historical
+	// analysis/plan if one already exists for the incident.
+	replaySimulator := replay.NewSimulator(incManager, evStore, depGraph, aiEngine, aiCfg, aiProvider, rmPlanner, rmCfg, rmProv)
+	replayAPI := httpapi.NewReplayAPI(replaySimulator)
 	corrAPI := httpapi.NewCorrelationAPI(corrEngine)
 	graphAPI := httpapi.NewGraphAPI(depGraph)
 	incidentAPI := httpapi.NewIncidentAPI(incManager, evStore, rcaEngine, corrEngine, aiEngine, depGraph)
@@ -391,6 +403,19 @@ func main() {
 			id := parts[4]
 			authorizer.Protect(security.PermissionView, func(w http.ResponseWriter, r *http.Request) {
 				incidentAPI.HandlePostAnalyze(w, r, id)
+			}).ServeHTTP(w, r)
+			return
+		}
+		// Module 5: POST /{incidentId}/replay -- read-only simulation, gated
+		// by the same PermissionView every other advisory/insight endpoint
+		// on this dispatcher uses. Never PermissionCreatePlan/ApprovePlan/
+		// Execute: replay never reaches any of those real gates at all (see
+		// internal/replay's own doc comment -- internal/execution is never
+		// imported anywhere in its dependency chain).
+		if len(parts) >= 6 && parts[5] == "replay" && r.Method == http.MethodPost {
+			id := parts[4]
+			authorizer.Protect(security.PermissionView, func(w http.ResponseWriter, r *http.Request) {
+				replayAPI.HandleReplayIncident(w, r, id)
 			}).ServeHTTP(w, r)
 			return
 		}
