@@ -116,3 +116,72 @@ jobs:
     - name: Tear down Docker Compose stack
       if: always()
       run: docker-compose down
+
+  full-chain-e2e:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # M2.15: unlike test-m27-docker.ps1 above, test-m215-full-chain.ps1 is
+    # self-contained -- it sets ATLAS_SECURITY_ENABLED/ATLAS_API_KEYS/
+    # ATLAS_EXECUTION_ENABLED/ATLAS_EXECUTION_PROVIDER itself (the same
+    # pattern test-m29-security.ps1 uses), so no env: block is needed here.
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Ensure docker-compose CLI is available
+      run: |
+        if ! command -v docker-compose >/dev/null 2>&1; then
+          echo "docker-compose (v1 CLI) not found on PATH; installing a shim that forwards to 'docker compose' (v2 plugin)."
+          sudo tee /usr/local/bin/docker-compose > /dev/null <<'SHIM'
+        #!/usr/bin/env bash
+        exec docker compose "$@"
+        SHIM
+          sudo chmod +x /usr/local/bin/docker-compose
+        fi
+        docker-compose version
+
+    - name: Verify pwsh is available
+      run: pwsh --version
+
+    # test-m215-full-chain.ps1 owns its own Docker bring-up (docker-compose
+    # down + up -d --build) and readiness wait, exactly like
+    # test-m27-docker.ps1 -- this step only needs to invoke it directly.
+    - name: Run Full-Chain E2E (test-m215-full-chain.ps1)
+      run: pwsh -File ./test-m215-full-chain.ps1
+
+    - name: Collect service logs on failure
+      if: failure()
+      run: |
+        docker-compose ps
+        docker-compose logs --no-color
+
+    - name: Tear down Docker Compose stack
+      if: always()
+      run: docker-compose down
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24' # frontend/package.json declares no engines field; 24 matches the actual local dev environment this project was built against, the same reasoning ci.yml already applies to Go/Java version pins above.
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies (Dashboard)
+      run: cd frontend && npm ci
+
+    - name: Typecheck (Dashboard)
+      run: cd frontend && npm run typecheck
+
+    - name: Lint (Dashboard)
+      run: cd frontend && npm run lint
+
+    - name: Test (Dashboard)
+      run: cd frontend && npm run test
+
+    - name: Build (Dashboard)
+      run: cd frontend && npm run build
