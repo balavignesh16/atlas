@@ -13,6 +13,7 @@ import (
 	"github.com/atlas/intelligence-engine/internal/graph"
 	"github.com/atlas/intelligence-engine/internal/incidentdetector"
 	"github.com/atlas/intelligence-engine/internal/incidentsignal"
+	"github.com/atlas/intelligence-engine/internal/registry"
 
 	metriccollectorpb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	tracecollectorpb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -34,7 +35,30 @@ func newTestHandler(t *testing.T) (*OTLPHandler, *buffer.EventBuffer) {
 	corrEngine := correlation.NewEngine(depGraph, 300)
 	signals := make(chan incidentsignal.Signal, 10)
 	detector := incidentdetector.NewDetector(incidentdetector.DefaultConfig(), depGraph, signals)
-	return NewOTLPHandler(buf, corrEngine, detector), buf
+	reg, err := registry.NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("registry.NewStore: %v", err)
+	}
+	t.Cleanup(func() { reg.Close() })
+	return NewOTLPHandler(buf, corrEngine, detector, reg), buf
+}
+
+// newTestHandlerWithRegistry is used only by tests that need to assert on
+// the registry side effect directly, so the 9 existing call sites above
+// that only care about the handler/buffer don't need a 3rd return value.
+func newTestHandlerWithRegistry(t *testing.T) (*OTLPHandler, *registry.Store) {
+	t.Helper()
+	buf := buffer.NewEventBuffer(100)
+	depGraph := graph.NewDependencyGraph(300)
+	corrEngine := correlation.NewEngine(depGraph, 300)
+	signals := make(chan incidentsignal.Signal, 10)
+	detector := incidentdetector.NewDetector(incidentdetector.DefaultConfig(), depGraph, signals)
+	reg, err := registry.NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("registry.NewStore: %v", err)
+	}
+	t.Cleanup(func() { reg.Close() })
+	return NewOTLPHandler(buf, corrEngine, detector, reg), reg
 }
 
 func validTraceBody(t *testing.T, serviceName, spanName string) []byte {
@@ -249,5 +273,83 @@ func TestHandleMetrics_ValidPayload_AddsToBufferOnly(t *testing.T) {
 	}
 	if events[0].MetricName != "request.latency" {
 		t.Errorf("expected MetricName to survive intact, got %q", events[0].MetricName)
+	}
+}
+
+func TestHandleTraces_RealTelemetry_RegistersServiceInCanonicalRegistry(t *testing.T) {
+	h, reg := newTestHandlerWithRegistry(t)
+	body := validTraceBody(t, "never-before-seen-service", "GET /whatever")
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/traces", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandleTraces(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	svc, ok, err := reg.Get("never-before-seen-service")
+	if err != nil {
+		t.Fatalf("registry Get: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected real OTLP trace traffic to register the service automatically, with no name known in advance")
+	}
+	if svc.Provenance != registry.ProvenanceObservedTelemetry {
+		t.Errorf("Provenance = %q, want %q", svc.Provenance, registry.ProvenanceObservedTelemetry)
+	}
+	if svc.Status != registry.StatusActive {
+		t.Errorf("Status = %q, want %q", svc.Status, registry.StatusActive)
+	}
+}
+
+func TestHandleTraces_MultiSpanBatch_DoesNotDuplicateRegistryWrites(t *testing.T) {
+	h, reg := newTestHandlerWithRegistry(t)
+	// Two spans, same service.name, in one payload -- validTraceBody only
+	// emits one span, so send the same body twice to simulate repeated
+	// sightings of the same service and confirm it stays one record.
+	body := validTraceBody(t, "same-service-twice", "GET /a")
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/v1/traces", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		h.HandleTraces(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d: expected 200, got %d", i, rec.Code)
+		}
+	}
+
+	all, err := reg.List(registry.ListFilter{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	count := 0
+	for _, svc := range all {
+		if svc.Name == "same-service-twice" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 registry record for a repeatedly-observed service, found %d", count)
+	}
+}
+
+func TestHandleMetrics_RealTelemetry_AlsoRegistersService(t *testing.T) {
+	h, reg := newTestHandlerWithRegistry(t)
+	body := validMetricBody(t, "metrics-only-service", "cpu.usage")
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/metrics", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandleMetrics(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	_, ok, err := reg.Get("metrics-only-service")
+	if err != nil {
+		t.Fatalf("registry Get: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected metrics telemetry (not just traces) to also register a service")
 	}
 }

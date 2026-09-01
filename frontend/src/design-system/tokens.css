@@ -1,0 +1,78 @@
+/*
+ * Atlas design tokens.
+ *
+ * Every color, radius, and font used anywhere in the app must come from
+ * this file via a Tailwind utility (e.g. `bg-surface-1`, `text-status-critical`).
+ * Never reference a raw Tailwind palette color (bg-red-500, text-gray-400,
+ * etc.) directly in a component -- that is how a dashboard drifts into
+ * looking like every other Tailwind template. If a needed token doesn't
+ * exist yet, add it here first.
+ *
+ * Palette: near-monochrome, cool-neutral dark surface. Status color is the
+ * only place saturated color appears.
+ */
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* Surfaces: page -> panel -> inset/hover, by background-color step only
+     (no shadows for inline hierarchy -- shadows are reserved for true
+     overlays: dialogs, popovers, the command palette). */
+  --color-surface-0: #0a0a0c;
+  --color-surface-1: #131316;
+  --color-surface-2: #1c1c21;
+  --color-surface-3: #26262c;
+
+  --color-border-subtle: #212126;
+  --color-border-default: #2f2f37;
+  --color-border-strong: #3d3d47;
+
+  --color-text-primary: #e6e6ea;
+  --color-text-secondary: #a3a3ad;
+  --color-text-muted: #6c6c76;
+  --color-text-disabled: #4a4a52;
+
+  /* Semantic status colors -- the only saturated color in the system.
+     Each has a paired faint background tint for restrained badge fills. */
+  --color-status-healthy: #2fb35e;
+  --color-status-healthy-bg: #2fb35e1f;
+
+  --color-status-warning: #d99a1b;
+  --color-status-warning-bg: #d99a1b1f;
+
+  --color-status-critical: #e5484d;
+  --color-status-critical-bg: #e5484d1f;
+
+  --color-status-executing: #3b82f6;
+  --color-status-executing-bg: #3b82f61f;
+
+  --color-status-failed: #f5455c;
+  --color-status-failed-bg: #f5455c1f;
+
+  --color-status-pending: #8b8b96;
+  --color-status-pending-bg: #8b8b961f;
+
+  --color-status-timeout: #8da2c0;
+  --color-status-timeout-bg: #8da2c01f;
+
+  --color-accent: #3b82f6;
+  --color-accent-bg: #3b82f61f;
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+
+  --text-2xs: 0.6875rem;   /* 11px -- table meta, timestamps */
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;      /* 12px -- table body, labels */
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.8125rem;    /* 13px -- default UI text */
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;   /* 14px -- emphasized body */
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1rem;         /* 16px -- panel headings */
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.25rem;      /* 20px -- page/incident title */
+  --text-xl--line-height: 1.75rem;
+}

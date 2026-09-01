@@ -32,7 +32,9 @@ import (
 	"github.com/atlas/intelligence-engine/internal/execution"
 	execprovider "github.com/atlas/intelligence-engine/internal/execution/provider"
 	"github.com/atlas/intelligence-engine/internal/infrastructure/docker"
+	"github.com/atlas/intelligence-engine/internal/registry"
 	"github.com/atlas/intelligence-engine/internal/security"
+	"github.com/atlas/intelligence-engine/internal/serviceintel"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +79,39 @@ func main() {
 
 	depGraph := graph.NewDependencyGraph(retention)
 	corrEngine := correlation.NewEngine(depGraph, retention)
+
+	// Phase 7B: canonical service registry -- a persistent record of "what
+	// services are known to this deployment," separate from depGraph's
+	// ephemeral, retention-based live topology. See docs/registry.md.
+	registryDBPath := os.Getenv("ATLAS_REGISTRY_DB_PATH")
+	if registryDBPath == "" {
+		registryDBPath = "atlas-registry.db"
+	}
+	serviceRegistry, err := registry.NewStore(registryDBPath)
+	if err != nil {
+		slog.Error("Failed to open service registry", slog.String("path", registryDBPath), slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer serviceRegistry.Close()
+
+	registryStaleAfter := 30 * time.Minute
+	if s, err := strconv.Atoi(os.Getenv("ATLAS_REGISTRY_STALE_AFTER_SECONDS")); err == nil && s > 0 {
+		registryStaleAfter = time.Duration(s) * time.Second
+	}
+	registryRetireAfter := 24 * time.Hour
+	if s, err := strconv.Atoi(os.Getenv("ATLAS_REGISTRY_RETIRE_AFTER_SECONDS")); err == nil && s > 0 {
+		registryRetireAfter = time.Duration(s) * time.Second
+	}
+	if registryRetireAfter <= registryStaleAfter {
+		// A registry retire window that isn't strictly longer than the
+		// stale window would let a service skip STALE and jump straight to
+		// RETIRED, which the documented lifecycle (docs/registry.md)
+		// promises never happens on its own -- fail loudly at startup
+		// rather than silently accept an inconsistent configuration.
+		slog.Error("ATLAS_REGISTRY_RETIRE_AFTER_SECONDS must be greater than ATLAS_REGISTRY_STALE_AFTER_SECONDS",
+			slog.Duration("staleAfter", registryStaleAfter), slog.Duration("retireAfter", registryRetireAfter))
+		os.Exit(1)
+	}
 
 	// M2.4 Initialization
 	evStore := evidence.NewStore()
@@ -137,8 +172,15 @@ func main() {
 	}
 	rmPlanner := remediation.NewPlanner(rmCfg, rmProv)
 
-	otlpHandler := ingestion.NewOTLPHandler(eventBuffer, corrEngine, detector)
+	otlpHandler := ingestion.NewOTLPHandler(eventBuffer, corrEngine, detector, serviceRegistry)
 	apiHandler := httpapi.NewVerificationAPI(eventBuffer)
+	registryAPI := httpapi.NewRegistryAPI(serviceRegistry)
+
+	// Phase 7D: composed, read-only per-service view assembled at request
+	// time from the registry, the live dependency graph, and incident
+	// history -- see docs/registry.md's "Service Intelligence" section.
+	intelligenceAssembler := serviceintel.NewAssembler(serviceRegistry, depGraph, incManager)
+	intelligenceAPI := httpapi.NewIntelligenceAPI(intelligenceAssembler)
 	corrAPI := httpapi.NewCorrelationAPI(corrEngine)
 	graphAPI := httpapi.NewGraphAPI(depGraph)
 	incidentAPI := httpapi.NewIncidentAPI(incManager, evStore, rcaEngine, corrEngine, aiEngine, depGraph)
@@ -183,6 +225,7 @@ func main() {
 		os.Exit(1)
 	}
 	authorizer := security.NewAuthorizer(securityEnabled, apiKeys)
+	authAPI := httpapi.NewAuthAPI()
 
 	go func() {
 		for sig := range signalsChan {
@@ -228,6 +271,9 @@ func main() {
 			// Expirations
 			corrEngine.CleanupExpired(now)
 			depGraph.CleanupExpired(now)
+			if err := serviceRegistry.EvaluateLifecycle(now, registryStaleAfter, registryRetireAfter); err != nil {
+				slog.Error("Failed to evaluate service registry lifecycle", slog.String("error", err.Error()))
+			}
 			evStore.CleanupExpired(incidentmanager.DefaultConfig().RetentionSeconds)
 			aiEngine.CleanupExpired(now)
 			rmPlanner.CleanupExpired(now)
@@ -260,6 +306,33 @@ func main() {
 		}
 		corrAPI.HandleGetTrace(w, r)
 	}))
+
+	// Identity API (Phase 5: read-only "who am I" -> PermissionView, same as
+	// every other read endpoint -- every real role holds VIEW).
+	mux.Handle("/api/v1/auth/me", authorizer.Protect(security.PermissionView, authAPI.HandleGetMe))
+
+	// Service Registry API (Phase 7B: read-only canonical registry ->
+	// PermissionView, same as every other read endpoint). No mutation
+	// routes exist -- the registry is only ever written by real observed
+	// telemetry (internal/ingestion) or the periodic lifecycle sweep below.
+	//
+	// Phase 7D: GET /api/v1/services/{name}/intelligence is dispatched
+	// inline here, mirroring the /api/v1/incidents/ dispatcher below --
+	// everything else falls through unchanged to the existing
+	// registryAPI.HandleGetService.
+	mux.HandleFunc("/api/v1/services/", func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(r.URL.Path, "/")
+		// format: /api/v1/services/{name}/intelligence
+		if len(parts) == 6 && parts[5] == "intelligence" {
+			name := parts[4]
+			authorizer.Protect(security.PermissionView, func(w http.ResponseWriter, r *http.Request) {
+				intelligenceAPI.HandleGetServiceIntelligence(w, r, name)
+			}).ServeHTTP(w, r)
+			return
+		}
+		authorizer.Protect(security.PermissionView, registryAPI.HandleGetService).ServeHTTP(w, r)
+	})
+	mux.Handle("/api/v1/services", authorizer.Protect(security.PermissionView, registryAPI.HandleListServices))
 
 	// Graph APIs (M2.11: read-only dependency graph -> PermissionView)
 	mux.Handle("/api/v1/graph/services/", authorizer.Protect(security.PermissionView, graphAPI.HandleGetServiceDependencies))
@@ -369,9 +442,18 @@ func main() {
 		apiHandler.HandleGetEventByID(w, r)
 	}))
 
+	// M2.15 dashboard: minimal CORS so the separate-origin frontend (Vite
+	// dev server by default) can call this API from a browser. Defaults to
+	// Vite's default local dev port; empty ATLAS_CORS_ORIGIN disables CORS
+	// headers entirely (see httpapi.WithCORS).
+	corsOrigin := os.Getenv("ATLAS_CORS_ORIGIN")
+	if corsOrigin == "" {
+		corsOrigin = "http://localhost:5173"
+	}
+
 	srv := &http.Server{
 		Addr:    ":" + port,
-		Handler: mux,
+		Handler: httpapi.WithCORS(mux, corsOrigin),
 	}
 
 	go func() {
